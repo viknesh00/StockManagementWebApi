@@ -35,9 +35,9 @@ public partial class SmInboundStockCii
 
     public string? UpdatedBy { get; set; }
 
-    public int FkUserCode { get; set; }
-	public int NewStock { get; set; }
-	public int UsedStock { get; set; }
+    public int? FkUserCode { get; set; }
+	public int? NewStock { get; set; }
+	public int? UsedStock { get; set; }
 
 	public virtual SmUser FkUserCodeNavigation { get; set; } = null!;
 
