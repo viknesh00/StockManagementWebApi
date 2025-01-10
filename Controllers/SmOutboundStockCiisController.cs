@@ -32,8 +32,8 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				var Inbounddata = _context.OutboundDataLists.FromSqlRaw(@"exec sp_outboundstockList @p0, @p1", MaterialNumber, SerialNumber).ToList();
-				var Deliverydata = _context.SmReturnStockCiis.FromSqlRaw(@"exec deliverystockCII @p0", SerialNumber).ToList();
+				var Deliverydata = _context.OutboundDataLists.FromSqlRaw(@"exec sp_outboundstockList @p0, @p1", MaterialNumber, SerialNumber).ToList();
+				var Inbounddata = _context.SmReturnStockCiis.FromSqlRaw(@"exec deliverystockCII @p0", SerialNumber).ToList();
 
 				return Ok(
                     new
