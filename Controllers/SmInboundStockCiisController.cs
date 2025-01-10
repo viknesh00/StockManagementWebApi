@@ -227,12 +227,12 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, "An error occurred while processing your request.");
 			}
 		}
-		[HttpPost("serial/{MaterialNumber}/{IsActive}")]
-        public async Task<ActionResult<SmInboundStockCii>> deleteSerialNumber(string MaterialNumber, bool IsActive)
+		[HttpPost("serial/{MaterialNumber}/{SerialNumber}")]
+        public async Task<ActionResult<SmInboundStockCii>> deleteSerialNumber(string MaterialNumber, string SerialNumber)
         {
             try
             {
-                var customers = _context.SmInboundStockCiis.FromSqlRaw(@"exec sp_deleteserialNumber @p0, @p1", MaterialNumber, IsActive).ToList();
+                var customers = _context.SmInboundStockCiis.FromSqlRaw(@"exec sp_deleteserialNumber @p0, @p1", MaterialNumber, SerialNumber).ToList();
                 return Ok(customers);
 
             }
