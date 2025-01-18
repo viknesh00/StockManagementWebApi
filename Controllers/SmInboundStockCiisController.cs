@@ -80,7 +80,7 @@ namespace StockManagementWebApi.Controllers
 					{
 							{ "SerialNumber", worksheet.Cells[row, 1].Text },
 							{ "Quantity", int.TryParse(worksheet.Cells[row, 2].Text, out int qty) ? qty : 0 },
-							{ "Status", worksheet.Cells[row, 3].Text },
+							{ "Status", worksheet.Cells[row, 3].Text }
 							//{ "DeliveryNumber", worksheet.Cells[row, 4].Text },
 							//{ "DeliveryNumber", worksheet.Cells[row, 1].Text },																																																																																																																					
 							//{ "OrderNumber", worksheet.Cells[row, 2].Text },
@@ -181,7 +181,7 @@ namespace StockManagementWebApi.Controllers
 		[HttpGet("{MaterialNumber}")]
         public async Task<ActionResult<SmInboundStockCii>> GetSmInboundStockCii(string MaterialNumber)
         {
-			var customers = _context.SmInboundStockCiis.FromSqlRaw(@"exec StockCIIListBySerialNumber @p0", MaterialNumber).ToList();
+			var customers = _context.StockInboundCIILists.FromSqlRaw(@"exec StockCIIListBySerialNumber @p0", MaterialNumber).ToList();
 			return Ok(customers);
 		}
 

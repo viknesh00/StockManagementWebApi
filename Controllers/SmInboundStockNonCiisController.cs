@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -35,6 +36,14 @@ namespace StockManagementWebApi.Controllers
 			var customers = _context.NonStockCIILists.FromSqlRaw(@"exec Non_StockCIIList ").ToList();
 			return Ok(customers);
 			
+		}
+
+		[HttpGet("GetInwardNonStockCiis/{MaterialNumber}")]
+		public async Task<ActionResult> GetInwardNonStockCiis(string MaterialNumber)
+		{
+			var customers = _context.SmInboundStockNonCiis.FromSqlRaw(@"exec sp_getInboundStock_NonCII @p0", MaterialNumber).ToList();
+			return Ok(customers);
+
 		}
 
 
@@ -142,7 +151,45 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-		
+
+
+		[HttpPost("AddNonStockReturndata")]
+		public async Task<IActionResult> AddNonStockReturndata([FromBody] AddNonStockReturnData data)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec sp_AddReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",data.OrderNumber, data.MaterialNumber,
+					data.ReturnLocation, data.Returndate, data.ReturnQuantity, data.ReceivedBy, data.RackLocation, data.ReturnType, data.Reason);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("UpdateNonStockReturndata")]
+		public async Task<IActionResult> UpdateNonStockReturndata([FromBody] UpdateNonStockRetundata data)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec sp_UpdateReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.OrderNumber,data.ExistOrderNumber, data.MaterialNumber,
+					data.ReturnLocation, data.Returndate, data.ReturnQuantity, data.ReceivedBy, data.RackLocation, data.ReturnType, data.Reason);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+
+
+
+
+
 
 
 

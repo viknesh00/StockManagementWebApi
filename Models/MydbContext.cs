@@ -41,9 +41,13 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<UpdatedeliveryDataList> UpdatedeliveryDataLists { get; set; }
 	public virtual DbSet<UpdateReturnDataList> UpdateReturnDataLists { get; set; }
 	public virtual DbSet<NonStockCIIList> NonStockCIILists { get; set; }
-	
+	public virtual DbSet<StockInboundCIIList> StockInboundCIILists { get; set; }
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+		
+
+			modelBuilder.Entity<StockInboundCIIList>().HasNoKey();
 		modelBuilder.Entity<NonStockCIIList>().HasNoKey();
 		modelBuilder.Entity<UpdateReturnDataList>().HasNoKey();
 		modelBuilder.Entity<UpdatedeliveryDataList>().HasNoKey();
