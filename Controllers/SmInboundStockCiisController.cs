@@ -74,13 +74,15 @@ namespace StockManagementWebApi.Controllers
 
 					for (int row = 2; row <= rowCount; row++) // Assuming first row is the header
 					{
-						var stock = new Dictionary<string, object>
+						if (worksheet.Cells[row, 1].Text !="")
+						{
+							var stock = new Dictionary<string, object>
 					{
 							{ "SerialNumber", worksheet.Cells[row, 1].Text },
 							{ "Quantity", int.TryParse(worksheet.Cells[row, 2].Text, out int qty) ? qty : 0 },
 							{ "Status", worksheet.Cells[row, 3].Text },
-							{ "DeliveryNumber", worksheet.Cells[row, 4].Text },
-							//{ "DeliveryNumber", worksheet.Cells[row, 1].Text },
+							//{ "DeliveryNumber", worksheet.Cells[row, 4].Text },
+							//{ "DeliveryNumber", worksheet.Cells[row, 1].Text },																																																																																																																					
 							//{ "OrderNumber", worksheet.Cells[row, 2].Text },
 							//{ "MaterialNumber", worksheet.Cells[row, 3].Text },
 							//{ "MaterialDescription", worksheet.Cells[row, 3].Text },
@@ -92,7 +94,8 @@ namespace StockManagementWebApi.Controllers
 							//{ "Status", worksheet.Cells[row, 10].Text },
 							//{ "RackLocation", worksheet.Cells[row, 11].Text },
 						};
-						inboundStocks.Add(stock);
+							inboundStocks.Add(stock);
+						}
 					}
 				}
 
@@ -124,7 +127,7 @@ namespace StockManagementWebApi.Controllers
 							//command.Parameters.AddWithValue("@ReceivedBy", stock["ReceivedBy"] ?? DBNull.Value);
 							//command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
 							//command.Parameters.AddWithValue("@RackLocation", stock["RackLocation"] ?? DBNull.Value);
-							command.Parameters.AddWithValue("@DeliveryNumber", stock["DeliveryNumber"] ?? DBNull.Value);
+							command.Parameters.AddWithValue("@DeliveryNumber", data.DeliveryNumber);
 							command.Parameters.AddWithValue("@OrderNumber", data.OrderNumber );
 							command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
 							command.Parameters.AddWithValue("@MaterialDescription",data.MaterialDescription);

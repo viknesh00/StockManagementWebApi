@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using StockManagementWebApi.Models.NonStockCII;
 
 namespace StockManagementWebApi.Models;
 
@@ -39,11 +40,11 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<AddReturnDataList> AddReturnDataLists { get; set; }
 	public virtual DbSet<UpdatedeliveryDataList> UpdatedeliveryDataLists { get; set; }
 	public virtual DbSet<UpdateReturnDataList> UpdateReturnDataLists { get; set; }
-	//public virtual DbSet<AddStockInward> AddStockInwards { get; set; }
+	public virtual DbSet<NonStockCIIList> NonStockCIILists { get; set; }
 	
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-		//modelBuilder.Entity<AddStockInward>().HasNoKey();
+		modelBuilder.Entity<NonStockCIIList>().HasNoKey();
 		modelBuilder.Entity<UpdateReturnDataList>().HasNoKey();
 		modelBuilder.Entity<UpdatedeliveryDataList>().HasNoKey();
 		modelBuilder.Entity<AddReturnDataList>().HasNoKey();

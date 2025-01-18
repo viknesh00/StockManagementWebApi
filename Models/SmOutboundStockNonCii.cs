@@ -29,5 +29,7 @@ public partial class SmOutboundStockNonCii
 
     public string? UpdatedBy { get; set; }
 
+    public bool? IsActive { get; set; }
+
     public virtual SmInboundStockNonCii FkInboundStockNonCiiDeliveryNumberNavigation { get; set; } = null!;
 }
