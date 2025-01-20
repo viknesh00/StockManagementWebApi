@@ -54,9 +54,9 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
+				await _context.Database.ExecuteSqlRawAsync(@"exec AddInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9",
                    data.DeliveryNumber,data.MaterialNumber,data.SerialNumber,data.MaterialDescription,data.OrderNumber,
-                   data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber);
+                   data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber,data.DeliveryNumber);
 				return Ok();
 	         }
 			catch (Exception ex)
@@ -73,9 +73,9 @@ namespace StockManagementWebApi.Controllers
              
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5",
+				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5,@p6",
 				  data.MaterialNumber, data.SerialNumber, data.OrderNumber,
-				   data.Outbounddate, data.TargetLocation, data.SentBy);
+				   data.Outbounddate, data.TargetLocation, data.SentBy,data.ReceiverName);
 				return Ok();
 			}
 			catch (Exception ex)

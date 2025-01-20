@@ -8,7 +8,7 @@
 		public string DeliveryNumber { get; set; }
 		public string OrderNumber { get; set; }
 		public DateTime? InwardDate { get; set; }
-		//public string MaterialName { get; set; }
+		public string ReceiverName { get; set; }
 		public string ReceivedBy { get; set; }
 		public string OutBoundOrderNumber { get; set; }
 		public DateTime? OutBoundDate { get; set; }

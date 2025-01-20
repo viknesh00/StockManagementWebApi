@@ -11,6 +11,7 @@
 		public string TargetLocation { get; set; }
 		public string SentBy { get; set; }
 		public string Fk_Inbound_StockCII_DeliveryNumber { get; set; }
+		public string ReceiverName { get; set; }
 	}
 }
 

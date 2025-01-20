@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using OfficeOpenXml;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.NonStockCII;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace StockManagementWebApi.Controllers
 {
@@ -184,6 +185,41 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, "An error occurred while processing your request.");
 			}
 		}
+
+		[HttpPost("UpdateNonStockReturnType/{MaterialNumber}/{OrderNumber}")]
+		public async Task<IActionResult> UpdateNonStockReturnType(string MaterialNumber, string OrderNumber)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec sp_UpdateNonStockReturnType @p0, @p1", MaterialNumber, OrderNumber);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+
+		[HttpPost("GetNonStockReturnData/{MaterialNumber}")]
+		public async Task<IActionResult> GetNonStockReturnData(string MaterialNumber)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec sp_GateNonStockReturnData @p0", MaterialNumber);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+
+
+
 
 
 
