@@ -28,12 +28,12 @@ namespace StockManagementWebApi.Controllers
         }
 
 		[HttpPost("{MaterialNumber}/{SerialNumber}")]
-		public async Task<ActionResult<StockCiiList>> outboundstockList(string MaterialNumber, string SerialNumber)
+		public async Task<ActionResult> outboundstockList(string MaterialNumber, string SerialNumber)
 		{
 			try
 			{
 				var Deliverydata = _context.OutboundDataLists.FromSqlRaw(@"exec sp_outboundstockList @p0, @p1", MaterialNumber, SerialNumber).ToList();
-				var Inbounddata = _context.SmReturnStockCiis.FromSqlRaw(@"exec deliverystockCII @p0", SerialNumber).ToList();
+				var Inbounddata = _context.ReturnStockDatas.FromSqlRaw(@"exec deliverystockCII @p0", SerialNumber).ToList();
 
 				return Ok(
                     new
@@ -56,7 +56,7 @@ namespace StockManagementWebApi.Controllers
 			{
 				await _context.Database.ExecuteSqlRawAsync(@"exec AddInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9",
                    data.DeliveryNumber,data.MaterialNumber,data.SerialNumber,data.MaterialDescription,data.OrderNumber,
-                   data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber,data.DeliveryNumber);
+                   data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber,data.ReceiverName);
 				return Ok();
 	         }
 			catch (Exception ex)
@@ -73,8 +73,8 @@ namespace StockManagementWebApi.Controllers
              
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5,@p6",
-				  data.MaterialNumber, data.SerialNumber, data.OrderNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7",
+				  data.MaterialNumber, data.SerialNumber, data.OrderNumber,data.ExistOrderNumber,
 				   data.Outbounddate, data.TargetLocation, data.SentBy,data.ReceiverName);
 				return Ok();
 			}
