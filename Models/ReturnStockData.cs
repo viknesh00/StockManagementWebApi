@@ -25,5 +25,7 @@
         public DateTime? UpdatedDate { get; set; }
 
         public string? UpdatedBy { get; set; }
+
+        public string RackLocation { get; set; }
     }
 }
