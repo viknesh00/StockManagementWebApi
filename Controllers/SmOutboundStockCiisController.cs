@@ -27,18 +27,20 @@ namespace StockManagementWebApi.Controllers
             return await _context.SmOutboundStockCiis.ToListAsync();
         }
 
-		[HttpPost("{MaterialNumber}/{SerialNumber}")]
-		public async Task<ActionResult> outboundstockList(string MaterialNumber, string SerialNumber)
+		[HttpPost("{MaterialNumber}/{SerialNumber}/{OrderNumber}")]
+		public async Task<ActionResult> outboundstockList(string MaterialNumber, string SerialNumber, string OrderNumber)
 		{
 			try
 			{
+                var CIIdata = _context.InboundCIILists.FromSqlRaw(@"exec sp_inboundstockList @p0, @p1, @p2", MaterialNumber, SerialNumber, OrderNumber).ToList();
 				var Deliverydata = _context.OutboundDataLists.FromSqlRaw(@"exec sp_outboundstockList @p0, @p1", MaterialNumber, SerialNumber).ToList();
 				var Inbounddata = _context.ReturnStockDatas.FromSqlRaw(@"exec deliverystockCII @p0", SerialNumber).ToList();
 
 				return Ok(
                     new
                     {
-                        InboundData = Inbounddata,
+						CIIData= CIIdata,
+						InboundData = Inbounddata,
 						DeliveryData= Deliverydata
 					});
 
