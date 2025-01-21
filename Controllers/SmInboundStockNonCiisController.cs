@@ -39,6 +39,21 @@ namespace StockManagementWebApi.Controllers
 			
 		}
 
+		[HttpPost("NonStockCIIMaterial/{MaterialNumber}/{MaterialDescription}")]
+		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec AddNonStockCII_MaterialNumber @p0, @p1", MaterialNumber, MaterialDescription);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
 		[HttpGet("GetInwardNonStockCiis/{MaterialNumber}")]
 		public async Task<ActionResult> GetInwardNonStockCiis(string MaterialNumber)
 		{
@@ -166,7 +181,8 @@ namespace StockManagementWebApi.Controllers
 			catch (Exception ex)
 			{
 				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
+				return StatusCode(500, "An error occurr" +
+					"ed while processing your request.");
 			}
 		}
 
@@ -185,6 +201,7 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, "An error occurred while processing your request.");
 			}
 		}
+
 
 		[HttpPost("UpdateNonStockReturnType/{MaterialNumber}/{OrderNumber}")]
 		public async Task<IActionResult> UpdateNonStockReturnType(string MaterialNumber, string OrderNumber)
