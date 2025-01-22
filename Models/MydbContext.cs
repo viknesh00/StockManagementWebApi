@@ -45,10 +45,12 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<NonStockCIIList> NonStockCIILists { get; set; }
 	public virtual DbSet<StockInboundCIIList> StockInboundCIILists { get; set; }
 	public virtual DbSet<InboundCIIList> InboundCIILists { get; set; }
+	public virtual DbSet<GetUsedStock> GetUsedStocks { get; set; }
 	
+
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-
+		modelBuilder.Entity<GetUsedStock>().HasNoKey();
 		modelBuilder.Entity<InboundCIIList>().HasNoKey();
 		modelBuilder.Entity<StockInboundCIIList>().HasNoKey();
         modelBuilder.Entity<ReturnStockData>().HasNoKey();

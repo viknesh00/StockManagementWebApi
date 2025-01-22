@@ -15,10 +15,10 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace StockManagementWebApi.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class SmInboundStockNonCiisController : ControllerBase
-    {
+	[Route("api/[controller]")]
+	[ApiController]
+	public class SmInboundStockNonCiisController : ControllerBase
+	{
 		private readonly MydbContext _context;
 		private readonly IWebHostEnvironment _environment;
 		private readonly IConfiguration _configuration;
@@ -36,7 +36,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			var customers = _context.NonStockCIILists.FromSqlRaw(@"exec Non_StockCIIList ").ToList();
 			return Ok(customers);
-			
+
 		}
 
 		[HttpPost("NonStockCIIMaterial/{MaterialNumber}/{MaterialDescription}")]
@@ -68,8 +68,8 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,  
-					data.MaterialDescription, data.Inwarddate, data.InwardFrom, data.ReceivedBy,data.RacKLocation, data.QuantityReceived);
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
+					data.MaterialDescription, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived);
 				return Ok();
 			}
 			catch (Exception ex)
@@ -80,7 +80,7 @@ namespace StockManagementWebApi.Controllers
 		}
 
 		[HttpPost("DeleteNonStockInbounddata/{MaterialNumber}/{DeliveryNumber}/{OrderNumber}")]
-		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber,string DeliveryNumber,string OrderNumber)
+		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber, string DeliveryNumber, string OrderNumber)
 		{
 			try
 			{
@@ -100,7 +100,7 @@ namespace StockManagementWebApi.Controllers
 			try
 			{
 				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.ExistDeliveryNumber,data.ExistOrderNumber, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived);
+					data.ExistDeliveryNumber, data.ExistOrderNumber, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived);
 				return Ok();
 			}
 			catch (Exception ex)
@@ -116,7 +116,7 @@ namespace StockManagementWebApi.Controllers
 			try
 			{
 				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddOutboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.MaterialDescription, data.OutboundDate, data.ReceiverName, data.TargetLocation, data.DeliveredQuantity, data.SentBy,data.DeliveryNumber_inbound);
+					data.MaterialDescription, data.OutboundDate, data.ReceiverName, data.TargetLocation, data.DeliveredQuantity, data.SentBy, data.DeliveryNumber_inbound);
 				return Ok();
 			}
 			catch (Exception ex)
@@ -126,11 +126,14 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-        
-		[HttpGet("DeliveredDataList")]
-		public async Task<ActionResult> GetDeliveredDataList()
+
+		[HttpGet("DeliveredDataList/{MaterialNumber}")]
+		public async Task<ActionResult> GetDeliveredDataList(string MaterialNumber)
 		{
-			var customers = _context.SmOutboundStockNonCiis.FromSqlRaw(@"select * from sm_OutboundStock_NonCII").ToList();
+			var customers = _context.SmOutboundStockNonCiis
+	.FromSqlRaw("SELECT * FROM sm_OutboundStock_NonCII WHERE materialnumber = @MaterialNumber AND IsActive <> 0",
+				new SqlParameter("@MaterialNumber", MaterialNumber))
+	.ToList();
 			return Ok(customers);
 
 		}
@@ -155,8 +158,8 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateOutboundStock_NonCII @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10", data.DeliveryNumber, data.OrderNumber, 
-					data.ExistDeliveryNumber,data.ExistOrderNumber, data.MaterialNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateOutboundStock_NonCII @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10", data.DeliveryNumber, data.OrderNumber,
+					data.ExistDeliveryNumber, data.ExistOrderNumber, data.MaterialNumber,
 					 data.OutboundDate, data.ReceiverName, data.TargetLocation, data.DeliveredQuantity, data.SentBy);
 				return Ok();
 			}
@@ -174,7 +177,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec sp_AddReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",data.OrderNumber, data.MaterialNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec sp_AddReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8", data.OrderNumber, data.MaterialNumber,
 					data.ReturnLocation, data.Returndate, data.ReturnQuantity, data.ReceivedBy, data.RackLocation, data.ReturnType, data.Reason);
 				return Ok();
 			}
@@ -191,7 +194,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec sp_UpdateReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.OrderNumber,data.ExistOrderNumber, data.MaterialNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec sp_UpdateReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.OrderNumber, data.ExistOrderNumber, data.MaterialNumber,
 					data.ReturnLocation, data.Returndate, data.ReturnQuantity, data.ReceivedBy, data.RackLocation, data.ReturnType, data.Reason);
 				return Ok();
 			}
@@ -224,7 +227,67 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec sp_GateNonStockReturnData @p0", MaterialNumber);
+				var customers = _context.ReturnStockNonCiis.FromSqlRaw(@"exec sp_GateNonStockReturnData @p0", MaterialNumber);
+				return Ok(customers);
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("GetNonStockUsedData/{MaterialNumber}")]
+		public async Task<IActionResult> GetNonStockUsedData(string MaterialNumber)
+		{
+			try
+			{
+				var customers = _context.GetUsedStocks.FromSqlRaw(@"exec Sp_GetUsedStock_NonCII @p0", MaterialNumber);
+				return Ok(customers);
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("AddNonStockUsedData")]
+		public async Task<IActionResult> AddNonStockUsedData([FromBody] AddUsedStock data)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddUsedStock_NonCII @p0,@p1,@p2,@p3,@p4", data.OrderNumber, data.MaterialNumber, data.ReturnDate, data.ReturnLocation, data.ItemQuantity);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("UpdateNonStockUsedData")]
+		public async Task<IActionResult> UpdateNonStockUsedData([FromBody] UpdateUsedStock data)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateUsedStock_NonCII @p0,@p1,@p2,@p3,@p4,@p5", data.OrderNumber,data.ExistOrderNumber, data.MaterialNumber, data.ReturnDate, data.ReturnLocation, data.ItemQuantity);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("DeleteNonStockUsedData/{MaterialNumber}/{OrderNumber}")]
+		public async Task<IActionResult> DeleteNonStockUsedData(string MaterialNumber, string OrderNumber)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteUsedStock_NonCII @p0,@p1", OrderNumber, MaterialNumber);
 				return Ok();
 			}
 			catch (Exception ex)
