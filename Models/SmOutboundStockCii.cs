@@ -31,5 +31,7 @@ public partial class SmOutboundStockCii
 
     public string? UpdatedBy { get; set; }
 
-    public virtual SmInboundStockCii FkInboundStockCiiDeliveryNumberNavigation { get; set; } = null!;
+	public string? ReceiverName { get; set; }
+
+	public virtual SmInboundStockCii FkInboundStockCiiDeliveryNumberNavigation { get; set; } = null!;
 }
