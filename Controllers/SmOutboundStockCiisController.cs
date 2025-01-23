@@ -108,9 +108,9 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateReturndata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
+				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateReturndata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9",
 				   data.MaterialNumber, data.SerialNumber, data.OrderNumber,
-				   data.LocationReturnedFrom, data.ReturnedDate, data.RackLocation, data.ReturnType, data.ReturnedBy, data.Returns);
+				   data.LocationReturnedFrom, data.ReturnedDate, data.RackLocation, data.ReturnType, data.ReturnedBy, data.Returns, data.ExistOrderNumber);
 				return Ok();
 			}
 
