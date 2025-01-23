@@ -220,6 +220,20 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, "An error occurred while processing your request.");
 			}
 		}
+		[HttpPost("DeleteNonStockReturnData/{MaterialNumber}/{OrderNumber}")]
+		public async Task<IActionResult> DeleteNonStockReturnData(string MaterialNumber, string OrderNumber)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec sp_DeleteNonStockReturndata @p0, @p1", MaterialNumber, OrderNumber);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
 
 
 		[HttpPost("GetNonStockReturnData/{MaterialNumber}")]
