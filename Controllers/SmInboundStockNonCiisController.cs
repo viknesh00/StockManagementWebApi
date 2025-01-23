@@ -158,7 +158,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateOutboundStock_NonCII @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10", data.DeliveryNumber, data.OrderNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateOutboundStock_NonCII @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.DeliveryNumber, data.OrderNumber,
 					data.ExistDeliveryNumber, data.ExistOrderNumber, data.MaterialNumber,
 					 data.OutboundDate, data.ReceiverName, data.TargetLocation, data.DeliveredQuantity, data.SentBy);
 				return Ok();
