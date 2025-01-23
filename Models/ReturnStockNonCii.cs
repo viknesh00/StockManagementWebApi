@@ -5,9 +5,9 @@ namespace StockManagementWebApi.Models;
 
 public partial class ReturnStockNonCii
 {
-    public string MaterialNumber { get; set; } = null;
+    public string? MaterialNumber { get; set; }
 
-    public string DeliveryNumber { get; set; } = null!;
+    public string? DeliveryNumber { get; set; }
 
     public string? OrderNumber { get; set; }
 

@@ -241,7 +241,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				var customers = _context.ReturnStockNonCiis.FromSqlRaw(@"exec sp_GateNonStockReturnData @p0", MaterialNumber);
+				var customers = _context.NonStockReturnCiis.FromSqlRaw(@"exec sp_GateNonStockReturnData @p0", MaterialNumber);
 				return Ok(customers);
 			}
 			catch (Exception ex)

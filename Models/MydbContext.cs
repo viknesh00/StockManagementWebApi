@@ -17,6 +17,7 @@ public partial class MydbContext : DbContext
     }
 
     public virtual DbSet<ReturnStockNonCii> ReturnStockNonCiis { get; set; }
+    public virtual DbSet<NonStockReturnCii> NonStockReturnCiis { get; set; }
 
     public virtual DbSet<SmCompany> SmCompanies { get; set; }
 
@@ -60,7 +61,8 @@ public partial class MydbContext : DbContext
 		modelBuilder.Entity<AddReturnDataList>().HasNoKey();
 		modelBuilder.Entity<StockCiiList>().HasNoKey();
 		modelBuilder.Entity<OutboundDataList>().HasNoKey();
-		modelBuilder.Entity<ReturnStockNonCii>(entity =>
+        modelBuilder.Entity<NonStockReturnCii>().HasNoKey();
+        modelBuilder.Entity<ReturnStockNonCii>(entity =>
         {
             entity.HasKey(e => e.DeliveryNumber).HasName("PK__ReturnSt__CB28B436CF5829ED");
 
