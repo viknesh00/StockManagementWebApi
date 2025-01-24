@@ -185,17 +185,70 @@ namespace StockManagementWebApi.Controllers
 		[HttpPost("DeleteNonStockDeliverdata/{MaterialNumber}/{DeliveryNumber}/{OrderNumber}")]
 		public async Task<IActionResult> DeleteNonStockDeliverdata(string MaterialNumber, string DeliveryNumber, string OrderNumber)
 		{
+			if (string.IsNullOrWhiteSpace(MaterialNumber) || string.IsNullOrWhiteSpace(DeliveryNumber) || string.IsNullOrWhiteSpace(OrderNumber))
+			{
+				return BadRequest("MaterialNumber, DeliveryNumber, and OrderNumber are required.");
+			}
+
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteNonStockDeliverCII @p0, @p1,@p2", MaterialNumber, DeliveryNumber, OrderNumber);
-				return Ok();
+				// Fetch outbound stock
+				var customers = await _context.SmOutboundStockNonCiis
+					.FromSqlRaw(
+						"SELECT * FROM sm_OutboundStock_NonCII WHERE materialnumber = @MaterialNumber AND IsActive <> 0",
+						new SqlParameter("@MaterialNumber", MaterialNumber)
+					).ToListAsync();
+
+				if (customers == null || !customers.Any())
+				{
+					return NotFound("No matching outbound stock records found.");
+				}
+
+				// Fetch inbound stock
+				var inboundStock = await _context.SmInboundStockNonCiis
+					.FromSqlRaw(
+						@"SELECT * FROM sm_InboundStock_NonCII 
+                  WHERE materialnumber = @p0 AND deliverynumber = @p1",
+						new SqlParameter("@p0", MaterialNumber),
+						new SqlParameter("@p1", DeliveryNumber)
+					).ToListAsync();
+
+				if (inboundStock == null || !inboundStock.Any())
+				{
+					return NotFound("No matching inbound stock records found.");
+				}
+
+				// Calculate new quantity
+				var totalQuantity = customers[0].DeliveredQuantity + inboundStock[0].DeliveredQuantity;
+
+				// Call stored procedure to delete the non-stock delivery data
+				await _context.Database.ExecuteSqlRawAsync(
+					@"exec Sp_DeleteNonStockDeliverCII @p0, @p1, @p2",
+					new SqlParameter("@p0", MaterialNumber),
+					new SqlParameter("@p1", DeliveryNumber),
+					new SqlParameter("@p2", OrderNumber)
+				);
+
+				// Update inbound stock's delivered quantity
+				await _context.Database.ExecuteSqlRawAsync(
+					@"UPDATE sm_InboundStock_NonCII 
+              SET DeliveredQuantity = @p0 
+              WHERE materialnumber = @p1 AND deliverynumber = @p2",
+					new SqlParameter("@p0", totalQuantity),
+					new SqlParameter("@p1", MaterialNumber),
+					new SqlParameter("@p2", DeliveryNumber)
+				);
+
+				return Ok("Non-stock delivery data deleted and inbound stock updated successfully.");
 			}
 			catch (Exception ex)
 			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
+				// Log the exception as needed
+				// Example: _logger.LogError(ex, "Error deleting non-stock delivery data");
+				return StatusCode(500, $"An error occurred: {ex.Message}");
 			}
 		}
+
 
 		[HttpPost("UpdateNonStockDeliverdata")]
 		public async Task<IActionResult> UpdateNonStockDeliverdata([FromBody] UpdateNonStockDeliverData data)
