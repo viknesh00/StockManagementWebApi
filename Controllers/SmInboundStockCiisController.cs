@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
@@ -127,8 +128,15 @@ namespace StockManagementWebApi.Controllers
 							//command.Parameters.AddWithValue("@ReceivedBy", stock["ReceivedBy"] ?? DBNull.Value);
 							//command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
 							//command.Parameters.AddWithValue("@RackLocation", stock["RackLocation"] ?? DBNull.Value);
-							command.Parameters.AddWithValue("@DeliveryNumber", data.DeliveryNumber);
-							command.Parameters.AddWithValue("@OrderNumber", data.OrderNumber );
+							command.Parameters.Add(new SqlParameter("@DeliveryNumber", SqlDbType.NVarChar)
+							{
+								Value = (object?)data.DeliveryNumber ?? DBNull.Value
+							});
+
+							command.Parameters.Add(new SqlParameter("@OrderNumber", SqlDbType.NVarChar)
+							{
+								Value = (object?)data.OrderNumber ?? DBNull.Value
+							});
 							command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
 							command.Parameters.AddWithValue("@MaterialDescription",data.MaterialDescription);
 							command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);

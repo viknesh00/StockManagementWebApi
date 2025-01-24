@@ -9,6 +9,7 @@
 		public string OrderNumber { get; set; }
 		public string ExistDeliveryNumber { get; set; }
 		public string ExistOrderNumber { get; set; }
+		public int ExistDeliveredQuantity { get; set; }
 		public DateTime? OutboundDate { get; set; }
 		public string ReceiverName { get; set; }
 		public int DeliveredQuantity { get; set; }

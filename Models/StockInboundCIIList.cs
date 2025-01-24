@@ -2,9 +2,9 @@
 {
 	public class StockInboundCIIList
 	{
-		public string DeliveryNumber { get; set; } = null!;
+		public string? DeliveryNumber { get; set; } = null!;
 
-		public string OrderNumber { get; set; } = null!;
+		public string? OrderNumber { get; set; } = null!;
 
 		public string? SerialNumber { get; set; }
 

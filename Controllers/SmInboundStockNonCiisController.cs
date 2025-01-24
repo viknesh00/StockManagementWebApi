@@ -115,16 +115,60 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddOutboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.MaterialDescription, data.OutboundDate, data.ReceiverName, data.TargetLocation, data.DeliveredQuantity, data.SentBy, data.DeliveryNumber_inbound);
-				return Ok();
+				// Fetch the inbound stock details
+				var customers = await _context.SmInboundStockNonCiis
+					.FromSqlRaw(
+						@"SELECT * FROM sm_InboundStock_NonCII 
+				  WHERE materialnumber = @p0 AND deliverynumber = @p1 ",
+						data.MaterialNumber, data.DeliveryNumber
+					).ToListAsync();
+
+				// Check if any data was retrieved
+				if (customers == null || customers.Count == 0)
+				{
+					return NotFound("No matching inbound stock record found.");
+				}
+
+				var customer = customers[0];
+
+				// Validate the delivered quantity
+				if (customer.DeliveredQuantity < data.DeliveredQuantity)
+				{
+					return StatusCode(500, "Delivered quantity exceeds in-stock quantity. Please adjust the delivered quantity.");
+				}
+
+				// Calculate the new inbound quantity
+				var inboundQuantity = customer.DeliveredQuantity - data.DeliveredQuantity;
+
+				// Add to outbound stock
+				await _context.Database.ExecuteSqlRawAsync(
+					@"EXEC Sp_AddOutboundStock_NonCII 
+			  @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9",
+					data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
+					data.MaterialDescription, data.OutboundDate, data.ReceiverName,
+					data.TargetLocation, data.DeliveredQuantity, data.SentBy, data.DeliveryNumber_inbound
+				);
+
+				// Update inbound stock
+				await _context.Database.ExecuteSqlRawAsync(
+					@"UPDATE sm_InboundStock_NonCII 
+			  SET DeliveredQuantity = @p0 
+			  WHERE materialnumber = @p1 AND deliverynumber = @p2 ",
+					inboundQuantity, data.MaterialNumber, data.DeliveryNumber
+				);
+
+				return Ok("Outbound data added successfully.");
 			}
 			catch (Exception ex)
 			{
-				// Log the exception or handle it as needed
+				// Log the exception for debugging
+				// Consider using a logging framework like Serilog or NLog
+				Console.WriteLine($"Error: {ex.Message}");
+
 				return StatusCode(500, "An error occurred while processing your request.");
 			}
 		}
+
 
 
 		[HttpGet("DeliveredDataList/{MaterialNumber}")]
@@ -158,17 +202,100 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateOutboundStock_NonCII @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.DeliveryNumber, data.OrderNumber,
-					data.ExistDeliveryNumber, data.ExistOrderNumber, data.MaterialNumber,
-					 data.OutboundDate, data.ReceiverName, data.TargetLocation, data.DeliveredQuantity, data.SentBy);
-				return Ok();
+				// Validate input data
+				if (data == null)
+				{
+					return BadRequest("Request data is null.");
+				}
+
+				// Retrieve the inbound stock record
+				var customers = await _context.SmInboundStockNonCiis
+					.FromSqlRaw(
+						@"SELECT * FROM sm_InboundStock_NonCII 
+                WHERE materialnumber = @p0 AND deliverynumber = @p1",
+						data.MaterialNumber, data.DeliveryNumber
+					).ToListAsync();
+
+				// Check if any data was retrieved
+				if (customers == null || customers.Count == 0)
+				{
+					return NotFound("No matching inbound stock record found.");
+				}
+
+				// Get the first record (assuming unique material and delivery number)
+				var customer = customers.FirstOrDefault();
+				if (customer == null)
+				{
+					return NotFound("Inbound stock record not found.");
+				}
+
+				// Initialize variables
+				int quantity = 0;
+				int inboundQuantity = customer.DeliveredQuantity ?? 0;
+
+				// Adjust quantities if DeliveredQuantity has changed
+				if (data.DeliveredQuantity != data.ExistDeliveredQuantity)
+				{
+					if (data.DeliveredQuantity < data.ExistDeliveredQuantity)
+					{
+						// DeliveredQuantity is being reduced
+						quantity = data.ExistDeliveredQuantity - data.DeliveredQuantity;
+
+						if (inboundQuantity < quantity)
+						{
+							return BadRequest("Delivered quantity exceeds available in-stock quantity. Please adjust the delivered quantity.");
+						}
+
+						// Reduce the inbound quantity
+						inboundQuantity += quantity;
+					}
+					else
+					{
+						// DeliveredQuantity is being increased
+						quantity = data.DeliveredQuantity - data.ExistDeliveredQuantity;
+
+						// Increase the inbound quantity
+						inboundQuantity -= quantity;
+					}
+					await _context.Database.ExecuteSqlRawAsync(
+					@"UPDATE sm_InboundStock_NonCII 
+              SET DeliveredQuantity = @p0 
+              WHERE materialnumber = @p1 AND deliverynumber = @p2",
+					inboundQuantity, data.MaterialNumber, data.DeliveryNumber
+				);
+				}
+
+				// Execute stored procedure to update outbound stock
+				await _context.Database.ExecuteSqlRawAsync(
+					@"exec Sp_UpdateOutboundStock_NonCII 
+              @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9",
+					data.DeliveryNumber,
+					data.OrderNumber,
+					data.ExistDeliveryNumber,
+					data.ExistOrderNumber,
+					data.MaterialNumber,
+					data.OutboundDate,
+					data.ReceiverName,
+					data.TargetLocation,
+					data.DeliveredQuantity,
+					data.SentBy
+				);
+
+				// Update the inbound stock record
+				
+
+				// Return success response
+				return Ok("Inbound stock and outbound stock updated successfully.");
 			}
 			catch (Exception ex)
 			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
+				// Log the exception for debugging purposes
+				// Consider injecting a logger (e.g., ILogger) for proper logging
+				return StatusCode(500, $"An error occurred: {ex.Message}");
 			}
 		}
+
+
 
 
 
