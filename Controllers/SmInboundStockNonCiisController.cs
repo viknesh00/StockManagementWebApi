@@ -174,8 +174,8 @@ namespace StockManagementWebApi.Controllers
 		[HttpGet("DeliveredDataList/{MaterialNumber}")]
 		public async Task<ActionResult> GetDeliveredDataList(string MaterialNumber)
 		{
-			var customers = _context.SmOutboundStockNonCiis
-	.FromSqlRaw("SELECT * FROM sm_OutboundStock_NonCII WHERE materialnumber = @MaterialNumber AND IsActive <> 0",
+			var customers = _context.GetNonStockDeliveredDatas
+    .FromSqlRaw("SELECT * FROM sm_OutboundStock_NonCII WHERE materialnumber = @MaterialNumber AND IsActive <> 0",
 				new SqlParameter("@MaterialNumber", MaterialNumber))
 	.ToList();
 			return Ok(customers);
