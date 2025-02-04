@@ -48,10 +48,16 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<StockInboundCIIList> StockInboundCIILists { get; set; }
 	public virtual DbSet<InboundCIIList> InboundCIILists { get; set; }
 	public virtual DbSet<GetUsedStock> GetUsedStocks { get; set; }
-	
+	public virtual DbSet<DashboardList> DashboardLists { get; set; }
+	public virtual DbSet<DashboardDeliveryCount> DashboardDeliveryCounts { get; set; }
+
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+		
+
+		modelBuilder.Entity<DashboardDeliveryCount>().HasNoKey();
+		modelBuilder.Entity<DashboardList>().HasNoKey();
 		modelBuilder.Entity<GetUsedStock>().HasNoKey();
 		modelBuilder.Entity<InboundCIIList>().HasNoKey();
 		modelBuilder.Entity<StockInboundCIIList>().HasNoKey();

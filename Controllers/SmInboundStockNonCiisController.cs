@@ -492,6 +492,30 @@ namespace StockManagementWebApi.Controllers
 		}
 
 
+		[HttpPost("DashBoard")]
+		public async Task<IActionResult> DashBoard()
+		{
+			try
+			{
+				var CIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_cii_stock");
+				var NonCIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_Non_StockCIIList");
+				var DeliveryReturnCount = _context.DashboardDeliveryCounts.FromSqlRaw(@"exec dashboard_delivery_return_count");
+				return Ok(new
+				{
+					CIICounts= CIICount,
+					NonCIICounts= NonCIICount,
+					DeliveryReturnCounts= DeliveryReturnCount
+
+				});
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+
 
 
 
