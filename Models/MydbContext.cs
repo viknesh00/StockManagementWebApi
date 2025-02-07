@@ -50,12 +50,13 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<GetUsedStock> GetUsedStocks { get; set; }
 	public virtual DbSet<DashboardList> DashboardLists { get; set; }
 	public virtual DbSet<DashboardDeliveryCount> DashboardDeliveryCounts { get; set; }
-
+	public virtual DbSet<AnalyticsDashboard> AnalyticsDashboards { get; set; }
+	
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-		
 
+		modelBuilder.Entity<AnalyticsDashboard>().HasNoKey();
 		modelBuilder.Entity<DashboardDeliveryCount>().HasNoKey();
 		modelBuilder.Entity<DashboardList>().HasNoKey();
 		modelBuilder.Entity<GetUsedStock>().HasNoKey();

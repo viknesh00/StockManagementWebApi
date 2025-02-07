@@ -515,6 +515,38 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+		[HttpPost("AnalyticsCII/{MaterialNumber}")]
+		public async Task<IActionResult> AnalyticsCII(string MaterialNumber)
+		{
+			try
+			{
+				
+				var DeliveryReturnCount = _context.AnalyticsDashboards.FromSqlRaw(@"exec AnalyticsCount_CII @p0", MaterialNumber);
+				return Ok(DeliveryReturnCount);
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("AnalyticsNonCII/{MaterialNumber}")]
+		public async Task<IActionResult> AnalyticsNonCII(string MaterialNumber)
+		{
+			try
+			{
+
+				var DeliveryReturnCount = _context.AnalyticsDashboards.FromSqlRaw(@"exec AnalyticsCount_NonCII @p0", MaterialNumber);
+				return Ok(DeliveryReturnCount);
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
 
 
 
