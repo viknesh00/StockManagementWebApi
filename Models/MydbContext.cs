@@ -52,11 +52,14 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<DashboardDeliveryCount> DashboardDeliveryCounts { get; set; }
 	public virtual DbSet<AnalyticsDashboard> AnalyticsDashboards { get; set; }
 	public virtual DbSet<NonStockInwardList> NonStockInwardLists { get; set; }
+	public virtual DbSet<Dashboardchart> Dashboardcharts { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+
 		
 
+		modelBuilder.Entity<Dashboardchart>().HasNoKey();
 		modelBuilder.Entity<NonStockInwardList>().HasNoKey();
 		modelBuilder.Entity<AnalyticsDashboard>().HasNoKey();
 		modelBuilder.Entity<DashboardDeliveryCount>().HasNoKey();
