@@ -51,11 +51,13 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<DashboardList> DashboardLists { get; set; }
 	public virtual DbSet<DashboardDeliveryCount> DashboardDeliveryCounts { get; set; }
 	public virtual DbSet<AnalyticsDashboard> AnalyticsDashboards { get; set; }
-	
+	public virtual DbSet<NonStockInwardList> NonStockInwardLists { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+		
 
+		modelBuilder.Entity<NonStockInwardList>().HasNoKey();
 		modelBuilder.Entity<AnalyticsDashboard>().HasNoKey();
 		modelBuilder.Entity<DashboardDeliveryCount>().HasNoKey();
 		modelBuilder.Entity<DashboardList>().HasNoKey();
@@ -127,10 +129,10 @@ public partial class MydbContext : DbContext
             entity.Property(e => e.UpdatedBy).HasMaxLength(45);
             entity.Property(e => e.UpdatedDate).HasColumnType("datetime");
 
-            entity.HasOne(d => d.FkUserCodeNavigation).WithMany(p => p.SmInboundStockCiis)
-                .HasForeignKey(d => d.FkUserCode)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("fk_sm_Inbound_StockCII_sm_Users");
+            //entity.HasOne(d => d.FkUserCodeNavigation).WithMany(p => p.SmInboundStockCiis)
+            //    .HasForeignKey(d => d.FkUserCode)
+            //    .OnDelete(DeleteBehavior.ClientSetNull)
+            //    .HasConstraintName("fk_sm_Inbound_StockCII_sm_Users");
         });
 
         modelBuilder.Entity<SmInboundStockNonCii>(entity =>
@@ -180,10 +182,10 @@ public partial class MydbContext : DbContext
             entity.Property(e => e.UpdatedBy).HasMaxLength(45);
             entity.Property(e => e.UpdatedDate).HasColumnType("datetime");
 
-            entity.HasOne(d => d.FkInboundStockCiiDeliveryNumberNavigation).WithMany(p => p.SmOutboundStockCiis)
-                .HasForeignKey(d => d.FkInboundStockCiiDeliveryNumber)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("fk_sm_Outbound_StockCII_sm_Inbound_StockCII1");
+            //entity.HasOne(d => d.FkInboundStockCiiDeliveryNumberNavigation).WithMany(p => p.SmOutboundStockCiis)
+            //    .HasForeignKey(d => d.FkInboundStockCiiDeliveryNumber)
+            //    .OnDelete(DeleteBehavior.ClientSetNull)
+            //    .HasConstraintName("fk_sm_Outbound_StockCII_sm_Inbound_StockCII1");
         });
 
         modelBuilder.Entity<SmOutboundStockNonCii>(entity =>

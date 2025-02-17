@@ -57,7 +57,7 @@ namespace StockManagementWebApi.Controllers
 		[HttpGet("GetInwardNonStockCiis/{MaterialNumber}")]
 		public async Task<ActionResult> GetInwardNonStockCiis(string MaterialNumber)
 		{
-			var customers = _context.SmInboundStockNonCiis.FromSqlRaw(@"exec sp_getInboundStock_NonCII @p0", MaterialNumber).ToList();
+			var customers = _context.NonStockInwardLists.FromSqlRaw(@"exec sp_getInboundStock_NonCII @p0", MaterialNumber).ToList();
 			return Ok(customers);
 
 		}
@@ -119,8 +119,8 @@ namespace StockManagementWebApi.Controllers
 				var customers = await _context.SmInboundStockNonCiis
 					.FromSqlRaw(
 						@"SELECT * FROM sm_InboundStock_NonCII 
-				  WHERE materialnumber = @p0 AND deliverynumber = @p1 ",
-						data.MaterialNumber, data.DeliveryNumber
+				  WHERE materialnumber = @p0 AND deliverynumber = @p1 AND OrderNumber= @p2 ",
+						data.MaterialNumber, data.DeliveryNumber , data.OrderNumber
 					).ToListAsync();
 
 				// Check if any data was retrieved
@@ -153,8 +153,8 @@ namespace StockManagementWebApi.Controllers
 				await _context.Database.ExecuteSqlRawAsync(
 					@"UPDATE sm_InboundStock_NonCII 
 			  SET DeliveredQuantity = @p0 
-			  WHERE materialnumber = @p1 AND deliverynumber = @p2 ",
-					inboundQuantity, data.MaterialNumber, data.DeliveryNumber
+			  WHERE materialnumber = @p1 AND deliverynumber = @p2 AND OrderNumber= @p3",
+					inboundQuantity, data.MaterialNumber, data.DeliveryNumber , data.OrderNumber
 				);
 
 				return Ok("Outbound data added successfully.");
@@ -208,9 +208,10 @@ namespace StockManagementWebApi.Controllers
 				var inboundStock = await _context.SmInboundStockNonCiis
 					.FromSqlRaw(
 						@"SELECT * FROM sm_InboundStock_NonCII 
-                  WHERE materialnumber = @p0 AND deliverynumber = @p1",
+                  WHERE materialnumber = @p0 AND deliverynumber = @p1 AND ordernumber = @p2",
 						new SqlParameter("@p0", MaterialNumber),
-						new SqlParameter("@p1", DeliveryNumber)
+						new SqlParameter("@p1", DeliveryNumber),
+						new SqlParameter("@p2", OrderNumber)
 					).ToListAsync();
 
 				if (inboundStock == null || !inboundStock.Any())
@@ -233,10 +234,11 @@ namespace StockManagementWebApi.Controllers
 				await _context.Database.ExecuteSqlRawAsync(
 					@"UPDATE sm_InboundStock_NonCII 
               SET DeliveredQuantity = @p0 
-              WHERE materialnumber = @p1 AND deliverynumber = @p2",
+              WHERE materialnumber = @p1 AND deliverynumber = @p2 AND ordernumber = @p3",
 					new SqlParameter("@p0", totalQuantity),
 					new SqlParameter("@p1", MaterialNumber),
-					new SqlParameter("@p2", DeliveryNumber)
+					new SqlParameter("@p2", DeliveryNumber),
+					new SqlParameter("@p3", OrderNumber)
 				);
 
 				return Ok("Non-stock delivery data deleted and inbound stock updated successfully.");
@@ -265,8 +267,8 @@ namespace StockManagementWebApi.Controllers
 				var customers = await _context.SmInboundStockNonCiis
 					.FromSqlRaw(
 						@"SELECT * FROM sm_InboundStock_NonCII 
-                WHERE materialnumber = @p0 AND deliverynumber = @p1",
-						data.MaterialNumber, data.DeliveryNumber
+                WHERE materialnumber = @p0 AND deliverynumber = @p1 and ordernumber =@p2",
+						data.MaterialNumber, data.DeliveryNumber , data.OrderNumber
 					).ToListAsync();
 
 				// Check if any data was retrieved
@@ -313,8 +315,8 @@ namespace StockManagementWebApi.Controllers
 					await _context.Database.ExecuteSqlRawAsync(
 					@"UPDATE sm_InboundStock_NonCII 
               SET DeliveredQuantity = @p0 
-              WHERE materialnumber = @p1 AND deliverynumber = @p2",
-					inboundQuantity, data.MaterialNumber, data.DeliveryNumber
+              WHERE materialnumber = @p1 AND deliverynumber = @p2 and ordernumber= @p3",
+					inboundQuantity, data.MaterialNumber, data.DeliveryNumber ,data.OrderNumber
 				);
 				}
 

@@ -145,7 +145,11 @@ namespace StockManagementWebApi.Controllers
 							command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom);
 							command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy);
 							command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-							command.Parameters.AddWithValue("@RackLocation", data.RacKLocation);
+							//command.Parameters.AddWithValue("@RackLocation", data.RacKLocation);
+							command.Parameters.Add(new SqlParameter("@RackLocation", SqlDbType.NVarChar)
+							{
+								Value = (object?)data.RacKLocation ?? DBNull.Value
+							});
 
 
 							await command.ExecuteNonQueryAsync();

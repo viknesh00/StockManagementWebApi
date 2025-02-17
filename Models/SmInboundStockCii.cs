@@ -5,9 +5,9 @@ namespace StockManagementWebApi.Models;
 
 public partial class SmInboundStockCii
 {
-    public string DeliveryNumber { get; set; } = null!;
+    public string DeliveryNumber { get; set; } 
 
-    public string OrderNumber { get; set; } = null!;
+    public string OrderNumber { get; set; } 
 
     public string? SerialNumber { get; set; }
 
@@ -39,7 +39,7 @@ public partial class SmInboundStockCii
 	public int? NewStock { get; set; }
 	public int? UsedStock { get; set; }
 
-	public virtual SmUser FkUserCodeNavigation { get; set; } = null!;
+	//public virtual SmUser FkUserCodeNavigation { get; set; } = null!;
 
-    public virtual ICollection<SmOutboundStockCii> SmOutboundStockCiis { get; set; } = new List<SmOutboundStockCii>();
+ //   public virtual ICollection<SmOutboundStockCii> SmOutboundStockCiis { get; set; } = new List<SmOutboundStockCii>();
 }
