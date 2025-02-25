@@ -73,6 +73,59 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+		[HttpGet("GetTenetList/{CompanyCode}")]
+		public async Task<ActionResult> GetTenetList( string CompanyCode)
+		{
+			var customers = _context.TenetLists.FromSqlRaw(@"exec TenentList @p0", CompanyCode).ToList();
+			return Ok(customers);
+
+		}
+
+		[HttpPost("AddTenet")]
+		public async Task<IActionResult> AddTenet([FromBody] AddTenet data)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec addtenent @p0,@p1,@p2,@p3", data.TenentCode, data.TenentLocation, data.TenentName, data.CompanyCode);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("UpdateTenet")]
+		public async Task<IActionResult> UpdateTenet([FromBody] UpdateTenet data)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec updatetenent @p0,@p1,@p2,@p3,@p4", data.TenentCode,data.ExistTenentCode, data.TenentLocation, data.TenentName, data.CompanyCode);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpPost("DeleteTenet/{CompanyId}/{TenetIdId}")]
+		public async Task<IActionResult> DeleteTenet(string TenetIdId, string CompanyId)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(
+					"UPDATE sm_Tenents SET TenentStatus = 0 WHERE Pk_TenentCode = {0} and Fk_CompanyCode={1}", TenetIdId, CompanyId);
+
+				return Ok("Company status updated successfully.");
+			}
+			catch (Exception ex)
+			{
+				// Log the exception details (if logging is configured)
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
 
 
 	}

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using StockManagementWebApi.Models.NonStockCII;
+using StockManagementWebApi.Models.UserManagement;
 
 namespace StockManagementWebApi.Models;
 
@@ -54,13 +55,14 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<NonStockInwardList> NonStockInwardLists { get; set; }
 	public virtual DbSet<Dashboardchart> Dashboardcharts { get; set; }
     public virtual DbSet<CompanyList> CompanyLists { get; set; }
+	public virtual DbSet<TenetList> TenetLists { get; set; }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
 
 
-
-        modelBuilder.Entity<CompanyList>().HasNoKey();
+		modelBuilder.Entity<TenetList>().HasNoKey();
+		modelBuilder.Entity<CompanyList>().HasNoKey();
         modelBuilder.Entity<Dashboardchart>().HasNoKey();
 		modelBuilder.Entity<NonStockInwardList>().HasNoKey();
 		modelBuilder.Entity<AnalyticsDashboard>().HasNoKey();
