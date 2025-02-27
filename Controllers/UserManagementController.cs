@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.BlazorIdentity.Pages.Manage;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.UserManagement;
 
@@ -109,6 +110,7 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+
 		[HttpPost("DeleteTenet/{CompanyId}/{TenetIdId}")]
 		public async Task<IActionResult> DeleteTenet(string TenetIdId, string CompanyId)
 		{
@@ -125,6 +127,44 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, "An error occurred while processing your request.");
 			}
 		}
+
+
+
+		
+
+		//User Management
+
+		[HttpPost("AddUser")]
+		public async Task<IActionResult> AddUser([FromBody] AddUser data)
+		{
+			try
+			{
+				var customers = _context.Database.SqlQueryRaw<string>("select LoginId from sm_Users where LoginId={0} ", data.Email).ToList();
+
+				if (customers.Count > 0) 
+				{
+					return StatusCode(500, "The User Email Already Exist!!!");
+				}
+
+				await _context.Database.ExecuteSqlRawAsync(@"exec AddUser @p0,@p1,@p2,@p3,@p4,@p5,@p6",
+					data.UserCode, data.UserName, data.Email, data.UserType, data.AccessLevel, data.Password,data.TenentCode);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+		[HttpGet("GetUserList/{TenentCode}")]
+		public async Task<ActionResult> GetUserList( string TenentCode)
+		{
+			var customers = _context.UserLists.FromSqlRaw(@"exec UserList @p0", TenentCode).ToList();
+			return Ok(customers);
+
+		}
+
+
 
 
 

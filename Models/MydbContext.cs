@@ -56,11 +56,14 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<Dashboardchart> Dashboardcharts { get; set; }
     public virtual DbSet<CompanyList> CompanyLists { get; set; }
 	public virtual DbSet<TenetList> TenetLists { get; set; }
+	public virtual DbSet<UserList> UserLists { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
 
+		
 
+		modelBuilder.Entity<UserList>().HasNoKey();
 		modelBuilder.Entity<TenetList>().HasNoKey();
 		modelBuilder.Entity<CompanyList>().HasNoKey();
         modelBuilder.Entity<Dashboardchart>().HasNoKey();
