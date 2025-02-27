@@ -119,7 +119,7 @@ namespace StockManagementWebApi.Controllers
 				await _context.Database.ExecuteSqlRawAsync(
 					"UPDATE sm_Tenents SET TenentStatus = 0 WHERE Pk_TenentCode = {0} and Fk_CompanyCode={1}", TenetIdId, CompanyId);
 
-				return Ok("Company status updated successfully.");
+				return Ok("Company Tenent deleted successfully.");
 			}
 			catch (Exception ex)
 			{
@@ -162,6 +162,38 @@ namespace StockManagementWebApi.Controllers
 			var customers = _context.UserLists.FromSqlRaw(@"exec UserList @p0", TenentCode).ToList();
 			return Ok(customers);
 
+		}
+
+		[HttpPost("UpdateUser")]
+		public async Task<IActionResult> UpdateUser([FromBody] UpdateUser data)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateUser @p0,@p1,@p2,@p3,@p4", data.UserCode, data.UserName, data.UserType, data.AccessLevel,data.UserStatus);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+
+		[HttpPost("DeleteUser/{UserId}")]
+		public async Task<IActionResult> DeleteUser(int UserId)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(
+					"UPDATE sm_Users SET IsActive = 0 WHERE Pk_UserCode = {0}", UserId);
+
+				return Ok("User Deleted successfully.");
+			}
+			catch (Exception ex)
+			{
+				// Log the exception details (if logging is configured)
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
 		}
 
 

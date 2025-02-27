@@ -44,5 +44,25 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, "An error occurred while processing your request.");
 			}
 		}
+
+		[HttpPost("ResetPassword")]
+		public async Task<IActionResult> ResetPassword([FromBody] ResetPassword data)
+		{
+			try
+			{
+				var customers = _context.UserLists.FromSqlRaw(@"exec Sp_Login @p0,@p1", data.Email, data.ExistPassword).ToList();
+
+				if (customers[0].Email != data.Email )
+				{
+					return StatusCode(500, "The User Email or Password is Invalid!!!");
+				}
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_ResetPassword @p0,@p1,@p2", data.Email, data.ExistPassword, data.NewPassword);
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
 	}
 }
