@@ -29,10 +29,10 @@ namespace StockManagementWebApi.Controllers
         }
 
         // GET: api/SmInboundStockCiis
-        [HttpGet]
-        public async Task<ActionResult> GetSmInboundStockCiis()
+        [HttpGet("GetSmInboundStockCiis/{UserName}")]
+        public async Task<ActionResult> GetSmInboundStockCiis(string UserName)
         {
-			var customers = _context.StockCiiLists.FromSqlRaw(@"exec StockCIIList ").ToList();
+			var customers = _context.StockCiiLists.FromSqlRaw(@"exec StockCIIList @p0", UserName).ToList();
 			return Ok(customers);
 			//return await _context.SmInboundStockCiis.ToListAsync();
         }
@@ -41,8 +41,11 @@ namespace StockManagementWebApi.Controllers
 		[HttpPost("import")]
 		public async Task<IActionResult> ImportStockData( AddStockInward data)
 		{
+
 			if (data.file == null || data.file.Length == 0)
 				return BadRequest("No file uploaded.");
+			var userCodes = await _context.Database.SqlQueryRaw<int>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
+
 
 			// Define the uploads directory
 			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
@@ -113,7 +116,7 @@ namespace StockManagementWebApi.Controllers
 					{
 						var query = @"
                         INSERT INTO sm_Inbound_StockCII (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription,SerialNumber,Quantity,InwardDate,SourceLocation,ReceivedBy,Status,RackLocation,Fk_UserCode)
-                        VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription,@SerialNumber,@Quantity,@InwardDate,@SourceLocation,@ReceivedBy,@Status,@RackLocation,1);";
+                        VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription,@SerialNumber,@Quantity,@InwardDate,@SourceLocation,@ReceivedBy,@Status,@RackLocation,@UserCodes);";
 
 						using (var command = new SqlCommand(query, connection))
 						{
@@ -145,7 +148,7 @@ namespace StockManagementWebApi.Controllers
 							command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom);
 							command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy);
 							command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@RackLocation", data.RacKLocation);
+							command.Parameters.AddWithValue("@UserCodes", userCodes[0]);
 							command.Parameters.Add(new SqlParameter("@RackLocation", SqlDbType.NVarChar)
 							{
 								Value = (object?)data.RacKLocation ?? DBNull.Value

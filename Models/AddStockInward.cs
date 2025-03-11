@@ -11,6 +11,7 @@
 		public string? ReceivedBy { get; set; }
 		public string? RacKLocation { get; set; }
 		public IFormFile file { get; set; }
+		public string UserName { get; set; }
 
 
 

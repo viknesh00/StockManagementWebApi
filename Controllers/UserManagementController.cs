@@ -23,10 +23,10 @@ namespace StockManagementWebApi.Controllers
             _context = context;
         }
 
-        [HttpGet]
-        public async Task<ActionResult> GetCompanyList()
+        [HttpGet("GetCompanyList/{UserName}")]
+        public async Task<ActionResult> GetCompanyList(string UserName)
         {
-            var customers = _context.CompanyLists.FromSqlRaw(@"exec CompanyList ").ToList();
+            var customers = _context.CompanyLists.FromSqlRaw(@"exec CompanyList @p0", UserName).ToList();
             return Ok(customers);
 
         }

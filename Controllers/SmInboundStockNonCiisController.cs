@@ -31,10 +31,10 @@ namespace StockManagementWebApi.Controllers
 		}
 
 		// GET: api/SmInboundStockNonCiis
-		[HttpGet]
-		public async Task<ActionResult> GetSmInboundNonStockCiis()
+		[HttpGet("GetSmInboundNonStockCiis/{UserName}")]
+		public async Task<ActionResult> GetSmInboundNonStockCiis(string UserName)
 		{
-			var customers = _context.NonStockCIILists.FromSqlRaw(@"exec Non_StockCIIList ").ToList();
+			var customers = _context.NonStockCIILists.FromSqlRaw(@"exec Non_StockCIIList @p0", UserName).ToList();
 			return Ok(customers);
 
 		}
@@ -494,14 +494,14 @@ namespace StockManagementWebApi.Controllers
 		}
 
 
-		[HttpPost("DashBoard")]
-		public async Task<IActionResult> DashBoard()
+		[HttpPost("DashBoard/{UserName}")]
+		public async Task<IActionResult> DashBoard(string UserName)
 		{
 			try
 			{
-				var CIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_cii_stock");
-				var NonCIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_Non_StockCIIList");
-				var DeliveryReturnCount = _context.DashboardDeliveryCounts.FromSqlRaw(@"exec dashboard_delivery_return_count");
+				var CIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_cii_stock @p0", UserName);
+				var NonCIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_Non_StockCIIList @p0", UserName);
+				var DeliveryReturnCount = _context.DashboardDeliveryCounts.FromSqlRaw(@"exec dashboard_delivery_return_count @p0", UserName);
 				return Ok(new
 				{
 					CIICounts= CIICount,
