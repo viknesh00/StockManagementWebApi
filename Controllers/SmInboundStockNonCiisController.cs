@@ -550,54 +550,23 @@ namespace StockManagementWebApi.Controllers
 		}
 
 
-		[HttpPost("DashBoardCharts")]
-		public async Task<IActionResult> DashBoardCharts()
+		[HttpPost("DashBoardCharts/{Username}")]
+		public async Task<IActionResult> DashBoardCharts(string Username)
 		{
 			try
 			{
-				var CIIInwardCount = _context.Dashboardcharts.FromSqlRaw(@"SELECT 
-    YEAR(inwarddate) AS Year, 
-    MONTH(inwarddate) AS Month, 
-    COUNT(*) AS RecordCount
-FROM [dbo].[sm_Inbound_StockCII] sos
-inner join [dbo].[sm_material_master] smm on smm.materialnumber=sos.materialnumber and smm.isactive<>0
-where inboundstockciikey<>0
-GROUP BY YEAR(inwarddate), MONTH(inwarddate)
-ORDER BY Year, Month;");
-				var NonCIIInwardCount = _context.Dashboardcharts.FromSqlRaw(@"SELECT 
-    YEAR(inwarddate) AS Year, 
-    MONTH(inwarddate) AS Month, 
-    sum(DeliveredQuantity) AS RecordCount
-FROM [dbo].[sm_InboundStock_NonCII] sos
-inner join [dbo].[sm_material_master] smm on smm.materialnumber=sos.materialnumber and smm.isactive<>0
-where inboundstocknonciikey<>0
-GROUP BY YEAR(inwarddate), MONTH(inwarddate)
-ORDER BY Year, Month;");
-				var CIIDeliveryCount = _context.Dashboardcharts.FromSqlRaw(@"SELECT 
-    YEAR(outbounddate) AS Year, 
-    MONTH(outbounddate) AS Month, 
-    count(*) AS RecordCount
-FROM [dbo].[sm_Outbound_StockCII] sos
-inner join [dbo].[sm_material_master] smm on smm.materialnumber=sos.materialnumber and smm.isactive<>0
-where outboundstockciikey<>0
-GROUP BY YEAR(outbounddate), MONTH(outbounddate)
-ORDER BY Year, Month;");
-				var NonCIIDeliveryCount = _context.Dashboardcharts.FromSqlRaw(@"SELECT 
-    YEAR(outbounddate) AS Year, 
-    MONTH(outbounddate) AS Month, 
-    sum(DeliveredQuantity) AS RecordCount
-FROM [dbo].[sm_OutboundStock_NonCII] sos
-inner join [dbo].[sm_material_master] smm on smm.materialnumber=sos.materialnumber and smm.isactive<>0
-where outboundstocknonciikey<>0
-GROUP BY YEAR(outbounddate), MONTH(outbounddate)
-ORDER BY Year, Month;
-");
+
+				var CIIInwardCount = _context.Dashboardcharts.FromSqlRaw(@" exec sp_CIIInwardCount @p0", Username);
+				var NonCIIInwardCount = _context.Dashboardcharts.FromSqlRaw(@"exec sp_NonCIIInwardCount @p0", Username);
+				var CIIDeliveryCount = _context.Dashboardcharts.FromSqlRaw(@" exec sp_CIIDeliveryCount @p0", Username);
+				var NonCIIDeliveryCount = _context.Dashboardcharts.FromSqlRaw(@"exec sp_NonCIIDeliveryCount @p0", Username);
+
 				return Ok(new
 				{
 					CIIInwardCounts = CIIInwardCount,
 					NonCIIInwardCounts = NonCIIInwardCount,
 					CIIDeliveryCounts = CIIDeliveryCount,
-					NonCIIDeliveryCounts= NonCIIDeliveryCount
+					NonCIIDeliveryCounts = NonCIIDeliveryCount
 				});
 			}
 			catch (Exception ex)
