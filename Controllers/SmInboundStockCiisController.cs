@@ -174,6 +174,70 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+
+		[HttpPost("ImportSingleStockData")]
+		public async Task<IActionResult> ImportSingleStockData(AddSingleStockInward data)
+		{
+			if (data == null)
+			{
+				return BadRequest("Invalid request data.");
+			}
+
+			try
+			{
+				var userCode = await _context.Database.SqlQueryRaw<int>(
+					"SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0",
+					data.UserName
+				).FirstOrDefaultAsync();
+
+				if (userCode == 0) // Handle case when user is not found
+				{
+					return BadRequest("User not found.");
+				}
+
+				var connectionString = _configuration.GetConnectionString("MyDBConnection");
+
+				using (var connection = new SqlConnection(connectionString))
+				{
+					await connection.OpenAsync();
+					var query = @"
+                INSERT INTO sm_Inbound_StockCII 
+                (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription, SerialNumber, Quantity, InwardDate, SourceLocation, ReceivedBy, Status, RackLocation, Fk_UserCode)
+                VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription, @SerialNumber, @Quantity, @InwardDate, @SourceLocation, @ReceivedBy, @Status, @RackLocation, @UserCode);";
+
+					using (var command = new SqlCommand(query, connection))
+					{
+						command.Parameters.AddWithValue("@DeliveryNumber", (object?)data.DeliveryNumber ?? DBNull.Value);
+						command.Parameters.AddWithValue("@OrderNumber", (object?)data.OrderNumber ?? DBNull.Value);
+						command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
+						command.Parameters.AddWithValue("@MaterialDescription", data.MaterialDescription);
+						command.Parameters.AddWithValue("@SerialNumber", data.SerialNumber);
+						command.Parameters.AddWithValue("@Quantity", data.Quantity);
+						command.Parameters.AddWithValue("@InwardDate", data.Inwarddate);
+						command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom);
+						command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy);
+						command.Parameters.AddWithValue("@Status", data.Status);
+						command.Parameters.AddWithValue("@UserCode", userCode);
+						command.Parameters.AddWithValue("@RackLocation", (object?)data.RacKLocation ?? DBNull.Value);
+
+						await command.ExecuteNonQueryAsync();
+					}
+				}
+
+				return Ok("Data imported successfully.");
+			}
+			catch (SqlException sqlEx)
+			{
+				return StatusCode(500, $"Database error: {sqlEx.Message}");
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, $"An error occurred: {ex.Message}");
+			}
+		}
+
+
+
 		[HttpPost("UpdateInbounddata")]
 		public async Task<IActionResult> UpdateInbounddata([FromBody]UpdateInboundData data)
 		{
@@ -190,6 +254,12 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+		[HttpPost("SearchSerialNumber/{username}/{SerialNumber}")]
+		public async Task<ActionResult<SerialNumberSearch>> GetSmInboundStockCii(string username, string SerialNumber)
+		{
+			var customers = _context.SerialNumberSearchs.FromSqlRaw(@"exec searchbyserialnumber @p0 , @p1", SerialNumber, username).ToList();
+			return Ok(customers);
+		}
 
 
 		// GET: api/SmInboundStockCiis/5
