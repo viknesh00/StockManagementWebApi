@@ -176,7 +176,7 @@ namespace StockManagementWebApi.Controllers
 
 
 		[HttpPost("ImportSingleStockData")]
-		public async Task<IActionResult> ImportSingleStockData(AddSingleStockInward data)
+		public async Task<IActionResult> ImportSingleStockDataF([FromBody] AddSingleStockInward data)
 		{
 			if (data == null)
 			{
@@ -185,12 +185,9 @@ namespace StockManagementWebApi.Controllers
 
 			try
 			{
-				var userCode = await _context.Database.SqlQueryRaw<int>(
-					"SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0",
-					data.UserName
-				).FirstOrDefaultAsync();
+                var userCode = await _context.Database.SqlQueryRaw<int>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
 
-				if (userCode == 0) // Handle case when user is not found
+                if (userCode[0] == 0) // Handle case when user is not found
 				{
 					return BadRequest("User not found.");
 				}
@@ -217,7 +214,7 @@ namespace StockManagementWebApi.Controllers
 						command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom);
 						command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy);
 						command.Parameters.AddWithValue("@Status", data.Status);
-						command.Parameters.AddWithValue("@UserCode", userCode);
+						command.Parameters.AddWithValue("@UserCode", userCode[0]);
 						command.Parameters.AddWithValue("@RackLocation", (object?)data.RacKLocation ?? DBNull.Value);
 
 						await command.ExecuteNonQueryAsync();
