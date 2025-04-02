@@ -28,5 +28,6 @@
 
         public bool? IsActive { get; set; }
         public string? ReceiverName { get; set; }
-    }
+		public int OutboundStockNonCIIKey { get; set; }
+	}
 }

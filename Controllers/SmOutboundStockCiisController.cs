@@ -54,20 +54,52 @@ namespace StockManagementWebApi.Controllers
 		[HttpPost("AddOutboundData")]
 		public async Task<ActionResult> AddOutboundData([FromBody] AddDeliveryData data)
 		{
+			if (data == null)
+			{
+				return BadRequest("Invalid request data.");
+			}
+
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9",
-                   data.DeliveryNumber,data.MaterialNumber,data.SerialNumber,data.MaterialDescription,data.OrderNumber,
-                   data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber,data.ReceiverName);
-				return Ok();
-	         }
+				// Validate if the serial number and material number exist
+				var status = await _context
+		.Database
+		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
+			data.SerialNumber, data.MaterialNumber)
+		.ToListAsync();
+
+
+				if (new[] { "Delivered", "Defective", "Damage" }.Contains(status[0], StringComparer.OrdinalIgnoreCase))
+				{
+					return StatusCode(400, "The serial number is already Delivered/Defective");
+				}
+
+				// Execute stored procedure to add inbound stock
+				await _context.Database.ExecuteSqlRawAsync(
+					"EXEC AddInboundStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9",
+					data.DeliveryNumber, data.MaterialNumber, data.SerialNumber, data.MaterialDescription, data.OrderNumber,
+					data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber, data.ReceiverName);
+
+				// Update the material type to 'Not Available'
+				await _context.Database.ExecuteSqlRawAsync(
+					"UPDATE sm_Inbound_StockCII SET Status = 'Delivered' WHERE serialNumber = @p0 AND materialNumber = @p1",
+					data.SerialNumber, data.MaterialNumber);
+
+				return Ok("Outbound data added successfully.");
+			}
+			catch (DbUpdateException dbEx)
+			{
+				// Log database exceptions
+				
+				return StatusCode(500, "A database error occurred while processing your request.");
+			}
 			catch (Exception ex)
 			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
+				
+				return StatusCode(500, "An unexpected error occurred while processing your request.");
 			}
-			
 		}
+
 
 		[HttpPost("UpdatedeliveryData")]
 		public async Task<ActionResult> UpdatedeliveryData([FromBody] UpdatedeliveryDataList data)
@@ -75,6 +107,7 @@ namespace StockManagementWebApi.Controllers
              
 			try
 			{
+				
 				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7",
 				  data.MaterialNumber, data.SerialNumber, data.OrderNumber,data.ExistOrderNumber,
 				   data.Outbounddate, data.TargetLocation, data.SentBy,data.ReceiverName);
@@ -91,9 +124,25 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
+				var status = await _context
+		.Database
+		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
+			data.SerialNumber, data.MaterialNumber)
+		.ToListAsync();
+
+
+				if (new[] { "Delivered" }.Contains(status[0], StringComparer.OrdinalIgnoreCase))
+				{
+					return StatusCode(400, "The serial number is already Delivered");
+				}
+
 				await _context.Database.ExecuteSqlRawAsync(@"exec AddReturnStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10",
 				   data.DeliveryNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,  data.OrderNumber,
 				   data.LocationReturnedFrom, data.Returneddate, data.ReturnedBy, data.RackLocation,data.ReturnType,data.Returns);
+
+				await _context.Database.ExecuteSqlRawAsync(
+					"UPDATE sm_Inbound_StockCII SET Status = 'Defective' WHERE serialNumber = @p0 AND materialNumber = @p1",
+					data.SerialNumber, data.MaterialNumber);
 				return Ok();
 			}
 

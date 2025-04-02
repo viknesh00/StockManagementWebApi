@@ -58,11 +58,13 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<TenetList> TenetLists { get; set; }
 	public virtual DbSet<UserList> UserLists { get; set; }
 	public virtual DbSet<SerialNumberSearch> SerialNumberSearchs { get; set; }
+	public virtual DbSet<SmOutBounddata> SmOutBounddatas { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+		
 
-
+		modelBuilder.Entity<SmOutBounddata>().HasNoKey();
 		modelBuilder.Entity<SerialNumberSearch>().HasNoKey();
 		modelBuilder.Entity<UserList>().HasNoKey();
 		modelBuilder.Entity<TenetList>().HasNoKey();

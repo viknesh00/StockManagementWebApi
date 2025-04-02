@@ -16,5 +16,6 @@
 		public string TargetLocation { get; set; }
 		public string SentBy { get; set; }
 		public string DeliveryNumber_inbound { get; set; }
+		public int OutboundStockNonCIIKey { get; set; }
 	}
 }
