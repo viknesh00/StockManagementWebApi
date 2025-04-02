@@ -5,7 +5,7 @@ namespace StockManagementWebApi.Models;
 
 public partial class SmOutboundStockCii
 {
-    public string DeliveryNumber { get; set; } = null!;
+    public string? DeliveryNumber { get; set; } = null!;
 
     public string? OrderNumber { get; set; }
 
@@ -23,7 +23,7 @@ public partial class SmOutboundStockCii
 
     public string? SentBy { get; set; }
 
-    public string FkInboundStockCiiDeliveryNumber { get; set; } = null!;
+    public string? FkInboundStockCiiDeliveryNumber { get; set; } = null!;
 
     public DateTime? CreatedDate { get; set; }
 

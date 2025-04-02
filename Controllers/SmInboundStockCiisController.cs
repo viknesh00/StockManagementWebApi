@@ -144,9 +144,10 @@ namespace StockManagementWebApi.Controllers
 							command.Parameters.AddWithValue("@MaterialDescription",data.MaterialDescription);
 							command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
 							command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
-							command.Parameters.AddWithValue("@InwardDate", data.Inwarddate);
-							command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom);
-							command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy);
+							command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
+
+							command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
+							command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
 							command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
 							command.Parameters.AddWithValue("@UserCodes", userCodes[0]);
 							command.Parameters.Add(new SqlParameter("@RackLocation", SqlDbType.NVarChar)
@@ -161,6 +162,10 @@ namespace StockManagementWebApi.Controllers
 				}
 
 				return Ok("Data imported successfully.");
+			}
+			catch (SqlException sqlEx)
+			{
+				return StatusCode(400, "Duplicate entry: The Serial number already exists.");
 			}
 			catch (Exception ex)
 			{
@@ -210,10 +215,11 @@ namespace StockManagementWebApi.Controllers
 						command.Parameters.AddWithValue("@MaterialDescription", data.MaterialDescription);
 						command.Parameters.AddWithValue("@SerialNumber", data.SerialNumber);
 						command.Parameters.AddWithValue("@Quantity", data.Quantity);
-						command.Parameters.AddWithValue("@InwardDate", data.Inwarddate);
-						command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom);
-						command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy);
-						command.Parameters.AddWithValue("@Status", data.Status);
+						command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
+
+						command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
+						command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
+						command.Parameters.AddWithValue("@Status", data.Status ?? (object)DBNull.Value);
 						command.Parameters.AddWithValue("@UserCode", userCode[0]);
 						command.Parameters.AddWithValue("@RackLocation", (object?)data.RacKLocation ?? DBNull.Value);
 
@@ -225,7 +231,7 @@ namespace StockManagementWebApi.Controllers
 			}
 			catch (SqlException sqlEx)
 			{
-				return StatusCode(500, $"Database error: {sqlEx.Message}");
+				return StatusCode(400, "Duplicate entry: The Serial number already exists.");
 			}
 			catch (Exception ex)
 			{
@@ -276,10 +282,13 @@ namespace StockManagementWebApi.Controllers
 				await _context.Database.ExecuteSqlRawAsync(@"exec AddMaterialNumber @p0, @p1", MaterialNumber, MaterialDescription);
 				return Ok(); 
 			}
+			catch (SqlException ex) when (ex.Number == 2627) // Unique Key Violation
+			{
+				return StatusCode(400, "Duplicate entry: The material number already exists.");
+			}
 			catch (Exception ex)
 			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
+				return StatusCode(500, $"An error occurred: {ex.Message}");
 			}
 		}
         [HttpPost("update/{ExistMaterialNumber}/{MaterialNumber}/{MaterialDescription}")]
