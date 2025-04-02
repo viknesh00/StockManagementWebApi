@@ -337,25 +337,38 @@ namespace StockManagementWebApi.Controllers
             }
         }
 
-        [HttpPost("{MaterialNumber}/{SerialNumber}/{status}")]
-        public async Task<ActionResult<SmInboundStockCii>> updateserialstatus(string MaterialNumber, string SerialNumber, string status)
-        {
-            try
-            {
-                var customers = _context.SmInboundStockCiis.FromSqlRaw(@"exec sp_updateserialstatus @p0, @p1, @p2", MaterialNumber, SerialNumber, status).ToList();
-                return Ok(customers);
+		[HttpPost("{MaterialNumber}/{SerialNumber}/{status}")]
+		public async Task<IActionResult> UpdateSerialStatus(string MaterialNumber, string SerialNumber, string status)
+		{
+			try
+			{
+				// Validate input parameters
+				if (string.IsNullOrWhiteSpace(MaterialNumber) || string.IsNullOrWhiteSpace(SerialNumber) || string.IsNullOrWhiteSpace(status))
+				{
+					return BadRequest("MaterialNumber, SerialNumber, and status cannot be empty.");
+				}
 
-            }
-            catch (Exception ex)
-            {
-                // Log the exception or handle it as needed
-                return StatusCode(500, "An error occurred while processing your request.");
-            }
-        }
+				// Execute stored procedure to update serial status
+				 await _context.Database.ExecuteSqlRawAsync(
+					"EXEC sp_updateserialstatus @p0, @p1, @p2", MaterialNumber, SerialNumber, status);
 
-        // PUT: api/SmInboundStockCiis/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
+				
+
+				return Ok("Serial status updated successfully.");
+			}
+			catch (Exception ex)
+			{
+				// Log the error (use a logging framework like Serilog in production)
+				Console.WriteLine($"Error updating serial status: {ex.Message}");
+
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
+
+		// PUT: api/SmInboundStockCiis/5
+		// To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+		[HttpPut("{id}")]
         public async Task<IActionResult> PutSmInboundStockCii(string id, SmInboundStockCii smInboundStockCii)
         {
             if (id != smInboundStockCii.DeliveryNumber)
