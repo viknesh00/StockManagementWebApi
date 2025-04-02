@@ -260,7 +260,7 @@ namespace StockManagementWebApi.Controllers
 		[HttpPost("SearchSerialNumber/{username}/{SerialNumber}")]
 		public async Task<ActionResult<SerialNumberSearch>> GetSmInboundStockCii(string username, string SerialNumber)
 		{
-			var customers = _context.SerialNumberSearchs.FromSqlRaw(@"exec searchbyserialnumber @p0 , @p1", SerialNumber, username).ToList();
+			var customers = _context.StockInboundCIILists.FromSqlRaw(@"exec searchbyserialnumber @p0 , @p1", SerialNumber, username).ToList();
 			return Ok(customers);
 		}
 
