@@ -315,8 +315,8 @@ namespace StockManagementWebApi.Controllers
 					return NotFound("No matching outbound stock record found.");
 				}
 
-				int existingOutboundQuantity = data.ExistDeliveredQuantity;
-				int quantityDifference = data.DeliveredQuantity - existingOutboundQuantity;
+				int existingOutboundQuantity = data.ExistDeliveredQuantity ?? 0;
+				int quantityDifference = (data.DeliveredQuantity ?? 0)- existingOutboundQuantity;
 
 				// Retrieve inbound stock data
 				var inboundStocks = await _context.SmOutBounddatas
