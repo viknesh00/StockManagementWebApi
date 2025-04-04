@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using OfficeOpenXml;
 using StockManagementWebApi.Models;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace StockManagementWebApi.Controllers
 {
@@ -348,13 +349,34 @@ namespace StockManagementWebApi.Controllers
 					return BadRequest("MaterialNumber, SerialNumber, and status cannot be empty.");
 				}
 
-				// Execute stored procedure to update serial status
-				 await _context.Database.ExecuteSqlRawAsync(
-					"EXEC sp_updateserialstatus @p0, @p1, @p2", MaterialNumber, SerialNumber, status);
 
+				var statuss = await _context
+		.Database
+		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
+			MaterialNumber, SerialNumber)
+		.ToListAsync();
+
+				// Validate if the status exists and is "Delivered"
 				
 
-				return Ok("Serial status updated successfully.");
+				if (!string.Equals(statuss[0], "Outward", StringComparison.OrdinalIgnoreCase))
+				{
+					await _context.Database.ExecuteSqlRawAsync(
+					"EXEC sp_updateserialstatus @p0, @p1, @p2", MaterialNumber, SerialNumber, status);
+
+
+
+					return Ok("Serial status updated successfully.");
+					
+				}
+				else
+				{
+					return BadRequest("The serial number status should not be 'Outward' before Update.");
+				}
+
+
+				// Execute stored procedure to update serial status
+				
 			}
 			catch (Exception ex)
 			{

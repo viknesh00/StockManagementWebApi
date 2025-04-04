@@ -139,7 +139,7 @@ namespace StockManagementWebApi.Controllers
 
 				if (!string.Equals(status[0], "Outward", StringComparison.OrdinalIgnoreCase))
 				{
-					return BadRequest("The serial number status should be 'Delivered' before returning.");
+					return BadRequest("The serial number status should be 'Outward' before returning.");
 				}
 
 				// Execute the stored procedure
