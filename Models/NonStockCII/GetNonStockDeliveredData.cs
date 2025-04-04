@@ -14,7 +14,7 @@
 
         public int DeliveredQuantity { get; set; }
 
-        public DateTime OutboundDate { get; set; }
+        public DateTime? OutboundDate { get; set; }
 
         public string? SentBy { get; set; }
 

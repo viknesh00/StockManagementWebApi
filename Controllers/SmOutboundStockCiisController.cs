@@ -137,7 +137,7 @@ namespace StockManagementWebApi.Controllers
 					return NotFound("Serial number or material number not found.");
 				}
 
-				if (!string.Equals(status[0], "Delivered", StringComparison.OrdinalIgnoreCase))
+				if (!string.Equals(status[0], "Outward", StringComparison.OrdinalIgnoreCase))
 				{
 					return BadRequest("The serial number status should be 'Delivered' before returning.");
 				}
