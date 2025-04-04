@@ -35,6 +35,8 @@
 		public int? Fk_UserCode { get; set; }
 		public int? NewStock { get; set; }
 		public int? UsedStock { get; set; }
+		public int?  InboundStockNonCIIKey { get; set; }
 
+	
 	}
 }

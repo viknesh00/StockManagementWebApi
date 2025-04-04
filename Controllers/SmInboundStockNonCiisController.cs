@@ -82,12 +82,12 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-		[HttpPost("DeleteNonStockInbounddata/{MaterialNumber}/{DeliveryNumber}/{OrderNumber}")]
-		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber, string DeliveryNumber, string OrderNumber)
+		[HttpPost("DeleteNonStockInbounddata/{MaterialNumber}/{DeliveryNumber}/{InboundStockNonCIIKey}")]
+		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber, string DeliveryNumber, string InboundStockNonCIIKey)
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteNonStockCII @p0, @p1,@p2", MaterialNumber, DeliveryNumber, OrderNumber);
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteNonStockCII @p0, @p1,@p2", MaterialNumber, DeliveryNumber, InboundStockNonCIIKey);
 				return Ok();
 			}
 			catch (Exception ex)
