@@ -352,8 +352,8 @@ namespace StockManagementWebApi.Controllers
 
 				var statuss = await _context
 		.Database
-		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
-			MaterialNumber, SerialNumber)
+		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1", SerialNumber,
+			MaterialNumber )
 		.ToListAsync();
 
 				// Validate if the status exists and is "Delivered"
