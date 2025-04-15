@@ -247,8 +247,8 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec updateInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8", data.MaterialNumber, data.SerialNumber,data.ExistSerialNumber,
-					data.RackLocation,data.DeliveryNumber,data.OrderNumber,data.InwardDate,data.InwardFrom,data.ReceivedBy);
+				await _context.Database.ExecuteSqlRawAsync(@"exec updateInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11", data.MaterialNumber, data.SerialNumber, data.ExistSerialNumber,
+					data.RackLocation, data.DeliveryNumber, data.OrderNumber, data.InwardDate, data.InwardFrom, data.ReceivedBy, data.QualityChecker,data.QualityCheckerStatus,data.QualityCheckDate);
 				return Ok();
 			}
 			catch (Exception ex)

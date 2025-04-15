@@ -11,8 +11,11 @@
 		public DateTime? InwardDate { get; set; }
 		public string InwardFrom { get; set; }
 		public string ReceivedBy { get; set; }
+		public DateTime? QualityCheckDate { get; set; }
+		public string QualityChecker { get; set; }
+		public string QualityCheckerStatus { get; set; }
 
 
-		
+
 	}
 }
