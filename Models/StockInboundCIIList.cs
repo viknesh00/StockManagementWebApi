@@ -35,5 +35,10 @@
 		public int? Fk_UserCode { get; set; }
 		public int? NewStock { get; set; }
 		public int? UsedStock { get; set; }
-	}
+        public DateTime? QualityCheckDate { get; set; }
+        public string? QualityChecker { get; set; }
+        public string? QualityCheckerStatus { get; set; }
+
+
+    }
 }
