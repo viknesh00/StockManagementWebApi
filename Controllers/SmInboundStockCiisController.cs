@@ -327,7 +327,7 @@ namespace StockManagementWebApi.Controllers
         {
             try
             {
-                var customers = _context.SmInboundStockCiis.FromSqlRaw(@"exec sp_deleteserialNumber @p0, @p1", MaterialNumber, SerialNumber).ToList();
+                var customers = _context.SmInboundStockCiiDeletes.FromSqlRaw(@"exec sp_deleteserialNumber @p0, @p1", MaterialNumber, SerialNumber).ToList();
                 return Ok(customers);
 
             }

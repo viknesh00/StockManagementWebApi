@@ -23,6 +23,7 @@ public partial class MydbContext : DbContext
     public virtual DbSet<SmCompany> SmCompanies { get; set; }
 
     public virtual DbSet<SmInboundStockCii> SmInboundStockCiis { get; set; }
+    public virtual DbSet<SmInboundStockCiiDelete> SmInboundStockCiiDeletes { get; set; }
 
     public virtual DbSet<SmInboundStockNonCii> SmInboundStockNonCiis { get; set; }
 
@@ -86,6 +87,7 @@ public partial class MydbContext : DbContext
 		modelBuilder.Entity<OutboundDataList>().HasNoKey();
         modelBuilder.Entity<NonStockReturnCii>().HasNoKey();
         modelBuilder.Entity<GetNonStockDeliveredData>().HasNoKey();
+        modelBuilder.Entity<SmInboundStockCiiDelete>().HasNoKey();
         modelBuilder.Entity<ReturnStockNonCii>(entity =>
         {
             entity.HasKey(e => e.DeliveryNumber).HasName("PK__ReturnSt__CB28B436CF5829ED");
