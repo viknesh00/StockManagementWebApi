@@ -13,6 +13,9 @@
 		public string? QualityChecker { get; set; }
 		public string? QualityCheckerStatus { get; set; }
 		public DateTime? QualityCheckDate { get; set; }
+		public string? CollectionPointerName { get; set; }
+		public DateTime? CollectionPointDate { get; set; }
+		public string? CollectionPointStatus { get; set; }
 
 	}
 }

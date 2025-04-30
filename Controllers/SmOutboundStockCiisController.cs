@@ -27,6 +27,36 @@ namespace StockManagementWebApi.Controllers
             return await _context.SmOutboundStockCiis.ToListAsync();
         }
 
+		[HttpPost("CollectionPointUpdate")]
+		public async Task<ActionResult> CollectionPointUpdate([FromBody] CollectionPointDetail data)
+		{
+			try
+			{
+				var sql = @"EXEC UpdateCollectionPointDetails 
+		           @MaterialNumber = {0}, 
+		           @SerialNumber = {1}, 
+		           @CollectionPointStatus = {2}, 
+		           @CollectionPointDate = {3}, 
+		           @CollectionPointerName = {4},
+                    @RackLocation={4}";
+
+				await _context.Database.ExecuteSqlRawAsync(sql,
+					data.MaterialNumber,
+					data.SerialNumber,
+					data.CollectionPointStatus,
+					data.CollectionPointDate,
+					data.CollectionPointerName,
+					data.RackLocation);
+
+				return Ok();
+			}
+			catch (Exception ex)
+			{
+				// Log the exception or handle it as needed
+				return StatusCode(500, "An error occurred while processing your request.");
+			}
+		}
+
 		[HttpPost("{MaterialNumber}/{SerialNumber}/{OrderNumber}")]
 		public async Task<ActionResult> outboundstockList(string MaterialNumber, string SerialNumber, string OrderNumber)
 		{
