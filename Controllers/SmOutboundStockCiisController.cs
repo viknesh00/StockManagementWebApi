@@ -38,7 +38,7 @@ namespace StockManagementWebApi.Controllers
 		           @CollectionPointStatus = {2}, 
 		           @CollectionPointDate = {3}, 
 		           @CollectionPointerName = {4},
-                    @RackLocation={4}";
+                    @RackLocation={5}";
 
 				await _context.Database.ExecuteSqlRawAsync(sql,
 					data.MaterialNumber,
