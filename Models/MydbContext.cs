@@ -19,8 +19,8 @@ public partial class MydbContext : DbContext
 
     public virtual DbSet<ReturnStockNonCii> ReturnStockNonCiis { get; set; }
     public virtual DbSet<NonStockReturnCii> NonStockReturnCiis { get; set; }
-
-    public virtual DbSet<SmCompany> SmCompanies { get; set; }
+	public virtual DbSet<ReportCii> ReportCiis { get; set; }
+	public virtual DbSet<SmCompany> SmCompanies { get; set; }
 
     public virtual DbSet<SmInboundStockCii> SmInboundStockCiis { get; set; }
     public virtual DbSet<SmInboundStockCiiDelete> SmInboundStockCiiDeletes { get; set; }
@@ -63,7 +63,7 @@ public partial class MydbContext : DbContext
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-		
+		modelBuilder.Entity<ReportCii>().HasNoKey();
 
 		modelBuilder.Entity<SmOutBounddata>().HasNoKey();
 		modelBuilder.Entity<SerialNumberSearch>().HasNoKey();
@@ -81,6 +81,10 @@ public partial class MydbContext : DbContext
         modelBuilder.Entity<ReturnStockData>().HasNoKey();
         modelBuilder.Entity<NonStockCIIList>().HasNoKey();
 		modelBuilder.Entity<UpdateReturnDataList>().HasNoKey();
+
+
+
+
 		modelBuilder.Entity<UpdatedeliveryDataList>().HasNoKey();
 		modelBuilder.Entity<AddReturnDataList>().HasNoKey();
 		modelBuilder.Entity<StockCiiList>().HasNoKey();

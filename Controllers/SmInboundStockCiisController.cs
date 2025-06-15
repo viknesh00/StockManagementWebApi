@@ -37,7 +37,13 @@ namespace StockManagementWebApi.Controllers
 			return Ok(customers);
 			//return await _context.SmInboundStockCiis.ToListAsync();
         }
-
+		[HttpGet("GetReportStockCiis/{UserName}")]
+		public async Task<ActionResult> GetReportStockCiis(string UserName)
+		{
+			var customers = _context.ReportCiis.FromSqlRaw(@"exec ReportCIIList @p0", UserName).ToList();
+			return Ok(customers);
+			//return await _context.SmInboundStockCiis.ToListAsync();
+		}
 
 		[HttpPost("import")]
 		public async Task<IActionResult> ImportStockData( AddStockInward data)

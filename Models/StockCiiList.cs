@@ -7,5 +7,7 @@
 		public int? others { get; set; }
 		public string materialNumber { get; set; }
 		public string MaterialDescription { get; set; }
+		public int? Damaged { get; set; }
+		public int? BreakFix { get; set; }
 	}
 }
