@@ -2,6 +2,7 @@
 {
 	public class UpdatedeliveryDataList
 	{
+		public string UserName { get; set; }
 		public string MaterialNumber { get; set; }
 		public string SerialNumber { get; set; }
 		public string OrderNumber { get; set; }

@@ -45,7 +45,15 @@ namespace StockManagementWebApi.Controllers
 			//return await _context.SmInboundStockCiis.ToListAsync();
 		}
 
-		[HttpPost("import")]
+        [HttpGet("GetLogmanagementRecord")]
+        public async Task<ActionResult> GetLogmanagementRecord()
+        {
+            var logRecords = await _context.Log_records.FromSqlRaw("SELECT * FROM Log_record").ToListAsync();
+            return Ok(logRecords);
+            //return await _context.SmInboundStockCiis.ToListAsync();
+        }
+
+        [HttpPost("import")]
 		public async Task<IActionResult> ImportStockData( AddStockInward data)
 		{
 
@@ -114,59 +122,63 @@ namespace StockManagementWebApi.Controllers
 					return BadRequest("The Excel file contains no data.");
 
 				// Insert data into the database
-				var connectionString = _configuration.GetConnectionString("MyDBConnection");
-				using (var connection = new SqlConnection(connectionString))
+				//var connectionString = _configuration.GetConnectionString("MyDBConnection");
+				//using (var connection = new SqlConnection(connectionString))
+				//{
+				//	await connection.OpenAsync();
+
+				foreach (var stock in inboundStocks)
 				{
-					await connection.OpenAsync();
+                    await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12",data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, 
+						data.MaterialDescription, stock["SerialNumber"],
+				stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation);
 
-					foreach (var stock in inboundStocks)
-					{
-						var query = @"
-                        INSERT INTO sm_Inbound_StockCII (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription,SerialNumber,Quantity,InwardDate,SourceLocation,ReceivedBy,Status,RackLocation,Fk_UserCode)
-                        VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription,@SerialNumber,@Quantity,@InwardDate,@SourceLocation,@ReceivedBy,@Status,@RackLocation,@UserCodes);";
+                    //var query = @"
+                    //                  INSERT INTO sm_Inbound_StockCII (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription,SerialNumber,Quantity,InwardDate,SourceLocation,ReceivedBy,Status,RackLocation,Fk_UserCode)
+                    //                  VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription,@SerialNumber,@Quantity,@InwardDate,@SourceLocation,@ReceivedBy,@Status,@RackLocation,@UserCodes);";
 
-						using (var command = new SqlCommand(query, connection))
-						{
-							//command.Parameters.AddWithValue("@DeliveryNumber", stock["DeliveryNumber"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@OrderNumber", stock["OrderNumber"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@MaterialNumber", stock["MaterialNumber"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@MaterialDescription", stock["MaterialDescription"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@InwardDate", stock["InwardDate"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@SourceLocation", stock["SourceLocation"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@ReceivedBy", stock["ReceivedBy"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-							//command.Parameters.AddWithValue("@RackLocation", stock["RackLocation"] ?? DBNull.Value);
-							command.Parameters.Add(new SqlParameter("@DeliveryNumber", SqlDbType.NVarChar)
-							{
-								Value = (object?)data.DeliveryNumber ?? DBNull.Value
-							});
+                    //using (var command = new SqlCommand(query, connection))
+                    //{
+                    //	//command.Parameters.AddWithValue("@DeliveryNumber", stock["DeliveryNumber"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@OrderNumber", stock["OrderNumber"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@MaterialNumber", stock["MaterialNumber"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@MaterialDescription", stock["MaterialDescription"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@InwardDate", stock["InwardDate"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@SourceLocation", stock["SourceLocation"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@ReceivedBy", stock["ReceivedBy"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
+                    //	//command.Parameters.AddWithValue("@RackLocation", stock["RackLocation"] ?? DBNull.Value);
+                    //	command.Parameters.Add(new SqlParameter("@DeliveryNumber", SqlDbType.NVarChar)
+                    //	{
+                    //		Value = (object?)data.DeliveryNumber ?? DBNull.Value
+                    //	});
 
-							command.Parameters.Add(new SqlParameter("@OrderNumber", SqlDbType.NVarChar)
-							{
-								Value = (object?)data.OrderNumber ?? DBNull.Value
-							});
-							command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
-							command.Parameters.AddWithValue("@MaterialDescription",data.MaterialDescription);
-							command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
-							command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
-							command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
+                    //	command.Parameters.Add(new SqlParameter("@OrderNumber", SqlDbType.NVarChar)
+                    //	{
+                    //		Value = (object?)data.OrderNumber ?? DBNull.Value
+                    //	});
+                    //	command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
+                    //	command.Parameters.AddWithValue("@MaterialDescription",data.MaterialDescription);
+                    //	command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
+                    //	command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
+                    //	command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
 
-							command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
-							command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
-							command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-							command.Parameters.AddWithValue("@UserCodes", userCodes[0]);
-							command.Parameters.Add(new SqlParameter("@RackLocation", SqlDbType.NVarChar)
-							{
-								Value = (object?)data.RacKLocation ?? DBNull.Value
-							});
+                    //	command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
+                    //	command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
+                    //	command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
+                    //	command.Parameters.AddWithValue("@UserCodes", userCodes[0]);
+                    //	command.Parameters.Add(new SqlParameter("@RackLocation", SqlDbType.NVarChar)
+                    //	{
+                    //		Value = (object?)data.RacKLocation ?? DBNull.Value
+                    //	});
 
 
-							await command.ExecuteNonQueryAsync();
-						}
-					}
-				}
+                    //	await command.ExecuteNonQueryAsync();
+                    //}
+                }
+				//}
 
 				return Ok("Data imported successfully.");
 			}
@@ -204,37 +216,40 @@ namespace StockManagementWebApi.Controllers
 					return BadRequest("User not found.");
 				}
 
-				var connectionString = _configuration.GetConnectionString("MyDBConnection");
+                await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12", data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,
+				data.Quantity, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.Status, userCode[0], data.RacKLocation);
 
-				using (var connection = new SqlConnection(connectionString))
-				{
-					await connection.OpenAsync();
-					var query = @"
-                INSERT INTO sm_Inbound_StockCII 
-                (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription, SerialNumber, Quantity, InwardDate, SourceLocation, ReceivedBy, Status, RackLocation, Fk_UserCode)
-                VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription, @SerialNumber, @Quantity, @InwardDate, @SourceLocation, @ReceivedBy, @Status, @RackLocation, @UserCode);";
+                //var connectionString = _configuration.GetConnectionString("MyDBConnection");
 
-					using (var command = new SqlCommand(query, connection))
-					{
-						command.Parameters.AddWithValue("@DeliveryNumber", (object?)data.DeliveryNumber ?? DBNull.Value);
-						command.Parameters.AddWithValue("@OrderNumber", (object?)data.OrderNumber ?? DBNull.Value);
-						command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
-						command.Parameters.AddWithValue("@MaterialDescription", data.MaterialDescription);
-						command.Parameters.AddWithValue("@SerialNumber", data.SerialNumber);
-						command.Parameters.AddWithValue("@Quantity", data.Quantity);
-						command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
+                //using (var connection = new SqlConnection(connectionString))
+                //{
+                //	await connection.OpenAsync();
+                //	var query = @"
+                //            INSERT INTO sm_Inbound_StockCII 
+                //            (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription, SerialNumber, Quantity, InwardDate, SourceLocation, ReceivedBy, Status, RackLocation, Fk_UserCode)
+                //            VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription, @SerialNumber, @Quantity, @InwardDate, @SourceLocation, @ReceivedBy, @Status, @RackLocation, @UserCode);";
 
-						command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
-						command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
-						command.Parameters.AddWithValue("@Status", data.Status ?? (object)DBNull.Value);
-						command.Parameters.AddWithValue("@UserCode", userCode[0]);
-						command.Parameters.AddWithValue("@RackLocation", (object?)data.RacKLocation ?? DBNull.Value);
+                //	using (var command = new SqlCommand(query, connection))
+                //	{
+                //		command.Parameters.AddWithValue("@DeliveryNumber", (object?)data.DeliveryNumber ?? DBNull.Value);
+                //		command.Parameters.AddWithValue("@OrderNumber", (object?)data.OrderNumber ?? DBNull.Value);
+                //		command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
+                //		command.Parameters.AddWithValue("@MaterialDescription", data.MaterialDescription);
+                //		command.Parameters.AddWithValue("@SerialNumber", data.SerialNumber);
+                //		command.Parameters.AddWithValue("@Quantity", data.Quantity);
+                //		command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
 
-						await command.ExecuteNonQueryAsync();
-					}
-				}
+                //		command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
+                //		command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
+                //		command.Parameters.AddWithValue("@Status", data.Status ?? (object)DBNull.Value);
+                //		command.Parameters.AddWithValue("@UserCode", userCode[0]);
+                //		command.Parameters.AddWithValue("@RackLocation", (object?)data.RacKLocation ?? DBNull.Value);
 
-				return Ok("Data imported successfully.");
+                //		await command.ExecuteNonQueryAsync();
+                //	}
+                //}
+
+                return Ok("Data imported successfully.");
 			}
 			catch (SqlException sqlEx)
 			{
@@ -253,7 +268,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec updateInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11", data.MaterialNumber, data.SerialNumber, data.ExistSerialNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec updateInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12", data.userName, data.MaterialNumber, data.SerialNumber, data.ExistSerialNumber,
 					data.RackLocation, data.DeliveryNumber, data.OrderNumber, data.InwardDate, data.InwardFrom, data.ReceivedBy, data.QualityChecker,data.QualityCheckerStatus,data.QualityCheckDate);
 				return Ok();
 			}
@@ -281,16 +296,16 @@ namespace StockManagementWebApi.Controllers
 		}
 
 
-		[HttpPost("Material/{MaterialNumber}/{MaterialDescription}")]
-		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription)
+		[HttpPost("Material/{MaterialNumber}/{MaterialDescription}/{userName}")]
+		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription, string userName)
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddMaterialNumber @p0, @p1", MaterialNumber, MaterialDescription);
+				await _context.Database.ExecuteSqlRawAsync(@"exec AddMaterialNumberNew @p0, @p1, @p2", userName, MaterialNumber, MaterialDescription);
 				return Ok(); 
 			}
-			catch (SqlException ex) when (ex.Number == 2627) // Unique Key Violation
-			{
+			catch (SqlException ex) when (ex.Number == 50001)  // Unique Key Violation
+            {
 				return StatusCode(400, "Duplicate entry: The material number already exists.");
 			}
 			catch (Exception ex)
@@ -298,12 +313,12 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, $"An error occurred: {ex.Message}");
 			}
 		}
-        [HttpPost("update/{ExistMaterialNumber}/{MaterialNumber}/{MaterialDescription}")]
-        public async Task<IActionResult> UpdateMaterialNumber(string ExistMaterialNumber, string MaterialNumber, string MaterialDescription)
+        [HttpPost("update/{ExistMaterialNumber}/{MaterialNumber}/{MaterialDescription}/{userName}")]
+        public async Task<IActionResult> UpdateMaterialNumber(string ExistMaterialNumber, string MaterialNumber, string MaterialDescription, string userName)
         {
             try
             {
-                await _context.Database.ExecuteSqlRawAsync(@"exec updatematerialNumber @p0, @p1, @p2", ExistMaterialNumber, MaterialNumber, MaterialDescription);
+                await _context.Database.ExecuteSqlRawAsync(@"exec updatematerialNumber @p0, @p1, @p2, @p3", userName, ExistMaterialNumber, MaterialNumber, MaterialDescription);
                 return Ok();
             }
             catch (Exception ex)
@@ -313,13 +328,13 @@ namespace StockManagementWebApi.Controllers
             }
         }
 
-		[HttpPost("{MaterialNumber}/{IsActive}")]
-		public async Task<ActionResult<StockCiiList>> deleteMaterialNumber(string MaterialNumber, bool IsActive)
+		[HttpPost("{MaterialNumber}/{IsActive}/{userName}")]
+		public async Task<ActionResult<StockCiiList>> deleteMaterialNumber(string MaterialNumber, bool IsActive, string userName)
 		{
 			try
 			{
 
-				await _context.Database.ExecuteSqlRawAsync(@"exec deletematerialnumber @p0, @p1", MaterialNumber, IsActive);
+				await _context.Database.ExecuteSqlRawAsync(@"exec deletematerialnumber @p0, @p1, @p2", userName, MaterialNumber, IsActive);
 				return Ok();
 			}
 			catch (Exception ex)
@@ -344,8 +359,8 @@ namespace StockManagementWebApi.Controllers
             }
         }
 
-		[HttpPost("{MaterialNumber}/{SerialNumber}/{status}")]
-		public async Task<IActionResult> UpdateSerialStatus(string MaterialNumber, string SerialNumber, string status)
+		[HttpPost("UpdateSerialStatus/{MaterialNumber}/{SerialNumber}/{status}/{UserName}")]
+		public async Task<IActionResult> UpdateSerialStatus(string MaterialNumber, string SerialNumber, string status, string UserName)
 		{
 			try
 			{
@@ -368,7 +383,7 @@ namespace StockManagementWebApi.Controllers
 				if (!string.Equals(statuss[0], "Outward", StringComparison.OrdinalIgnoreCase))
 				{
 					await _context.Database.ExecuteSqlRawAsync(
-					"EXEC sp_updateserialstatus @p0, @p1, @p2", MaterialNumber, SerialNumber, status);
+					"EXEC sp_updateserialstatus @p0, @p1, @p2,@p3", UserName, MaterialNumber, SerialNumber, status);
 
 
 

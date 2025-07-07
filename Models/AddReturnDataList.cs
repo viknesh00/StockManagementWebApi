@@ -2,7 +2,8 @@
 {
 	public class AddReturnDataList
 	{
-		public string DeliveryNumber { get; set; }
+        public string UserName { get; set; }
+        public string DeliveryNumber { get; set; }
 		public string MaterialNumber { get; set; }
 		public string MaterialDescription { get; set; }
 

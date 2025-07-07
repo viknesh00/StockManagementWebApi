@@ -2,6 +2,7 @@
 {
 	public class UpdateInboundData
 	{
+		public string userName { get; set; }
 		public string MaterialNumber { get; set; }
 		public string SerialNumber { get; set; }
 		public string ExistSerialNumber { get; set; }

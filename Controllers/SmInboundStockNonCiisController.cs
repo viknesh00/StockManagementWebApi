@@ -39,12 +39,12 @@ namespace StockManagementWebApi.Controllers
 
 		}
 
-		[HttpPost("NonStockCIIMaterial/{MaterialNumber}/{MaterialDescription}")]
-		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription)
+		[HttpPost("NonStockCIIMaterial/{MaterialNumber}/{MaterialDescription}/{userName}")]
+		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription, string userName)
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddNonStockCII_MaterialNumber @p0, @p1", MaterialNumber, MaterialDescription);
+				await _context.Database.ExecuteSqlRawAsync(@"exec AddNonStockCII_MaterialNumber @p0, @p1, @p2", userName, MaterialNumber, MaterialDescription);
 				return Ok();
 			}
 			catch (SqlException ex) when (ex.Number == 2627) // Unique Key Violation
@@ -82,12 +82,12 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-		[HttpPost("DeleteNonStockInbounddata/{MaterialNumber}/{DeliveryNumber}/{InboundStockNonCIIKey}")]
-		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber, string DeliveryNumber, string InboundStockNonCIIKey)
+		[HttpPost("DeleteNonStockInbounddata/{MaterialNumber}/{DeliveryNumber}/{InboundStockNonCIIKey}/{name}")]
+		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber, string DeliveryNumber, string InboundStockNonCIIKey, string name)
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteNonStockCII @p0, @p1,@p2", MaterialNumber, DeliveryNumber, InboundStockNonCIIKey);
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteNonStockCII @p0, @p1,@p2,@p3", name,MaterialNumber, DeliveryNumber, InboundStockNonCIIKey);
 				return Ok();
 			}
 			catch (Exception ex)
@@ -102,7 +102,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10",data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
 					data.ExistDeliveryNumber, data.ExistOrderNumber, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived);
 				return Ok();
 			}
@@ -166,8 +166,8 @@ namespace StockManagementWebApi.Controllers
 				// Add to outbound stock
 				await _context.Database.ExecuteSqlRawAsync(
 					@"EXEC Sp_AddOutboundStock_NonCII 
-                @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9",
-					data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
+                @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9,@p10",
+					data.UserName,data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
 					data.MaterialDescription, data.OutboundDate, data.ReceiverName,
 					data.TargetLocation, data.DeliveredQuantity, data.SentBy, data.DeliveryNumber_inbound
 				);
@@ -209,8 +209,8 @@ namespace StockManagementWebApi.Controllers
 
 
 
-		[HttpPost("DeleteNonStockDeliverdata/{MaterialNumber}/{DeliveryNumber}/{OutboundStockNonCIIKey}")]
-		public async Task<IActionResult> DeleteNonStockDeliverdata(string MaterialNumber, string DeliveryNumber, string OutboundStockNonCIIKey)
+		[HttpPost("DeleteNonStockDeliverdata/{MaterialNumber}/{DeliveryNumber}/{OutboundStockNonCIIKey}/{UserName}")]
+		public async Task<IActionResult> DeleteNonStockDeliverdata(string MaterialNumber, string DeliveryNumber, string OutboundStockNonCIIKey,string Username)
 		{
 			if (string.IsNullOrWhiteSpace(MaterialNumber) || string.IsNullOrWhiteSpace(DeliveryNumber))
 			{
@@ -261,10 +261,11 @@ namespace StockManagementWebApi.Controllers
 
 				// Call stored procedure to delete the outbound stock record
 				await _context.Database.ExecuteSqlRawAsync(
-					@"EXEC Sp_DeleteNonStockDeliverCII @p0, @p1, @p2",
-					new SqlParameter("@p0", MaterialNumber),
-					new SqlParameter("@p1", DeliveryNumber),
-					new SqlParameter("@p2", OutboundStockNonCIIKey)
+					@"EXEC Sp_DeleteNonStockDeliverCII @p0, @p1, @p2,@p3",
+                    new SqlParameter("@p0", Username),
+                    new SqlParameter("@p1", MaterialNumber),
+					new SqlParameter("@p2", DeliveryNumber),
+					new SqlParameter("@p3", OutboundStockNonCIIKey)
 				);
 
 				// Update inbound stock records
@@ -371,7 +372,8 @@ namespace StockManagementWebApi.Controllers
 				// Update outbound stock
 				await _context.Database.ExecuteSqlRawAsync(
 					@"EXEC Sp_UpdateOutboundStock_NonCII 
-              @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9,@p10",
+              @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9,@p10,@p11",
+					data.UserName,
 					data.DeliveryNumber,
 					data.OrderNumber,
 					data.ExistDeliveryNumber,

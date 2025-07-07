@@ -2,6 +2,7 @@
 {
 	public class AddOutBoundNonStockCII
 	{
+		public string UserName { get; set; }
 		public string MaterialNumber { get; set; }
 		public string MaterialDescription { get; set; }
 		public string? DeliveryNumber { get; set; }

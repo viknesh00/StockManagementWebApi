@@ -1,4 +1,6 @@
-﻿namespace StockManagementWebApi.Models
+﻿using System.Data;
+
+namespace StockManagementWebApi.Models
 {
 	public class ReportCii
 	{
@@ -8,5 +10,6 @@
 		public string status { get; set; }
 		
 		public DateTime? InwardDate { get; set; }
+		public DateTime? OutboundDate { get; set; }
 	}
 }

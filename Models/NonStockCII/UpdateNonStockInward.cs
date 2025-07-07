@@ -2,6 +2,7 @@
 {
 	public class UpdateNonStockInward
 	{
+		public string UserName { get; set; }
 		public string MaterialNumber { get; set; }
 		public string ExistDeliveryNumber { get; set; }
 		public string ExistOrderNumber { get; set; }

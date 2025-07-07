@@ -33,14 +33,17 @@ namespace StockManagementWebApi.Controllers
 			try
 			{
 				var sql = @"EXEC UpdateCollectionPointDetails 
-		           @MaterialNumber = {0}, 
-		           @SerialNumber = {1}, 
-		           @CollectionPointStatus = {2}, 
-		           @CollectionPointDate = {3}, 
-		           @CollectionPointerName = {4},
-                    @RackLocation={5}";
+				   @username = {0},
+		           @MaterialNumber = {1}, 
+		           @SerialNumber = {2}, 
+		           @CollectionPointStatus = {3}, 
+		           @CollectionPointDate = {4}, 
+		           @CollectionPointerName = {5},
+                   @RackLocation={6}";
 
 				await _context.Database.ExecuteSqlRawAsync(sql,
+
+					data.UserName,
 					data.MaterialNumber,
 					data.SerialNumber,
 					data.CollectionPointStatus,
@@ -106,7 +109,7 @@ namespace StockManagementWebApi.Controllers
 
 				// Execute stored procedure to add inbound stock
 				await _context.Database.ExecuteSqlRawAsync(
-					"EXEC AddInboundStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9",
+					"EXEC AddInboundStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10", data.UserName,
 					data.DeliveryNumber, data.MaterialNumber, data.SerialNumber, data.MaterialDescription, data.OrderNumber,
 					data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber, data.ReceiverName);
 
@@ -138,8 +141,8 @@ namespace StockManagementWebApi.Controllers
 			try
 			{
 				
-				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7",
-				  data.MaterialNumber, data.SerialNumber, data.OrderNumber,data.ExistOrderNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
+				  data.UserName,data.MaterialNumber, data.SerialNumber, data.OrderNumber,data.ExistOrderNumber,
 				   data.Outbounddate, data.TargetLocation, data.SentBy,data.ReceiverName);
 				return Ok();
 			}
@@ -174,8 +177,8 @@ namespace StockManagementWebApi.Controllers
 
 				// Execute the stored procedure
 				await _context.Database.ExecuteSqlRawAsync(
-					"EXEC AddReturnStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10",
-					data.DeliveryNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,
+					"EXEC AddReturnStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10,@p11",
+					data.UserName,data.DeliveryNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,
 					data.OrderNumber, data.LocationReturnedFrom, data.Returneddate, data.ReturnedBy,
 					data.RackLocation, data.ReturnType, data.Returns);
 
@@ -197,11 +200,12 @@ namespace StockManagementWebApi.Controllers
 
 		[HttpPost("UpdateReturnData")]
 		public async Task<ActionResult> UpdateReturnData([FromBody] UpdateReturnDataList data)
+
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateReturndata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9",
-				   data.MaterialNumber, data.SerialNumber, data.OrderNumber,
+				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateReturndata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10",
+				   data.UserName,data.MaterialNumber, data.SerialNumber, data.OrderNumber,
 				   data.LocationReturnedFrom, data.ReturnedDate, data.RackLocation, data.ReturnType, data.ReturnedBy, data.Returns, data.ExistOrderNumber);
 				return Ok();
 			}

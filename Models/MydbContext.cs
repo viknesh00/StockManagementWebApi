@@ -60,8 +60,9 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<UserList> UserLists { get; set; }
 	public virtual DbSet<SerialNumberSearch> SerialNumberSearchs { get; set; }
 	public virtual DbSet<SmOutBounddata> SmOutBounddatas { get; set; }
+    public virtual DbSet<Log_record> Log_records { get; set; }
 
-	protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
 		modelBuilder.Entity<ReportCii>().HasNoKey();
 
@@ -81,11 +82,12 @@ public partial class MydbContext : DbContext
         modelBuilder.Entity<ReturnStockData>().HasNoKey();
         modelBuilder.Entity<NonStockCIIList>().HasNoKey();
 		modelBuilder.Entity<UpdateReturnDataList>().HasNoKey();
+        modelBuilder.Entity<Log_record>().HasNoKey();
 
 
 
 
-		modelBuilder.Entity<UpdatedeliveryDataList>().HasNoKey();
+        modelBuilder.Entity<UpdatedeliveryDataList>().HasNoKey();
 		modelBuilder.Entity<AddReturnDataList>().HasNoKey();
 		modelBuilder.Entity<StockCiiList>().HasNoKey();
 		modelBuilder.Entity<OutboundDataList>().HasNoKey();
