@@ -4,6 +4,7 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -53,6 +54,79 @@ namespace StockManagementWebApi.Controllers
             //return await _context.SmInboundStockCiis.ToListAsync();
         }
 
+		[HttpPost("AddBulkMaterialStock")]
+		public async Task<IActionResult> Importstockdate1(AddStockInward data)
+		{
+			if(data.file == null || data.file.Length == 0)
+				return  (BadRequest("No file uploaded."));
+            var userCodes = await _context.Database.SqlQueryRaw<int>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
+            // Define the uploads directory
+            var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+			// Create the directory if it doesn't exist
+			if (!Directory.Exists(uploadsDirectory))
+			{
+				Directory.CreateDirectory(uploadsDirectory);
+			}
+			// Full file path
+			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
+			try
+			{
+				// Save the uploaded file
+				using (var stream = new FileStream(filePath, FileMode.Create))
+				{
+					data.file.CopyTo(stream);
+				}
+				// Read data from Excel
+				var inboundStocks = new List<Dictionary<string, object>>();
+				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+				using (var package = new ExcelPackage(new FileInfo(filePath)))
+				{
+					var worksheet = package.Workbook.Worksheets[0]; // Assuming data is in the first sheet
+					var rowCount = worksheet.Dimension.Rows;
+					for (int row = 2; row <= rowCount; row++) // Assuming first row is the header
+					{
+						if (worksheet.Cells[row, 1].Text != "")
+						{
+							var stock = new Dictionary<string, object>
+							{
+
+								{ "MaterialNumber", worksheet.Cells[row, 1].Text },
+								{ "SerialNumber", worksheet.Cells[row, 2].Text },
+								{ "Quantity", int.TryParse(worksheet.Cells[row, 3].Text, out int qty) ? qty : 0 },
+								{ "Status", worksheet.Cells[row, 4].Text }
+							};
+							inboundStocks.Add(stock);
+						}
+					}
+
+
+				}
+				if (inboundStocks.Count == 0)
+					return BadRequest("The Excel file contains no data.");
+
+				foreach (var stock in inboundStocks)
+				{
+					await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12", data.UserName, data.DeliveryNumber, data.OrderNumber, stock["MaterialNumber"],
+						data.MaterialDescription, stock["SerialNumber"],
+				stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation);
+				}
+
+				return Ok("Data imported successfully.");
+			}
+
+			catch (Exception ex)
+			{
+				return (StatusCode(500, $"An error occurred: {ex.Message}"));
+			}
+			finally
+			{
+                if (System.IO.File.Exists(filePath))
+                    System.IO.File.Delete(filePath);
+
+            }
+
+        }
+
         [HttpPost("import")]
 		public async Task<IActionResult> ImportStockData( AddStockInward data)
 		{
@@ -97,6 +171,7 @@ namespace StockManagementWebApi.Controllers
 						{
 							var stock = new Dictionary<string, object>
 					{
+
 							{ "SerialNumber", worksheet.Cells[row, 1].Text },
 							{ "Quantity", int.TryParse(worksheet.Cells[row, 2].Text, out int qty) ? qty : 0 },
 							{ "Status", worksheet.Cells[row, 3].Text }
