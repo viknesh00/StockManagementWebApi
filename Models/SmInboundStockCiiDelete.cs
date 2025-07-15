@@ -32,7 +32,7 @@
 
         public string? UpdatedBy { get; set; }
 
-        public int? Fk_UserCode { get; set; }
+        public string? Fk_UserCode { get; set; }
         public int? NewStock { get; set; }
         public int? UsedStock { get; set; }
     }

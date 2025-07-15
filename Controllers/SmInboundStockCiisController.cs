@@ -133,7 +133,7 @@ namespace StockManagementWebApi.Controllers
 
 			if (data.file == null || data.file.Length == 0)
 				return BadRequest("No file uploaded.");
-			var userCodes = await _context.Database.SqlQueryRaw<int>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
+			var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
 
 
 			// Define the uploads directory
@@ -284,9 +284,9 @@ namespace StockManagementWebApi.Controllers
 
 			try
 			{
-                var userCode = await _context.Database.SqlQueryRaw<int>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
+				var userCode = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
 
-                if (userCode[0] == 0) // Handle case when user is not found
+                if (userCode[0] ==  null) // Handle case when user is not found
 				{
 					return BadRequest("User not found.");
 				}
