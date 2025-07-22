@@ -61,11 +61,13 @@ public partial class MydbContext : DbContext
 	public virtual DbSet<SerialNumberSearch> SerialNumberSearchs { get; set; }
 	public virtual DbSet<SmOutBounddata> SmOutBounddatas { get; set; }
     public virtual DbSet<Log_record> Log_records { get; set; }
+	public virtual DbSet<MaterialComparisonResult> MaterialComparisonResults { get; set; }
+	
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+	protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+		modelBuilder.Entity<MaterialComparisonResult>().HasNoKey();
 		modelBuilder.Entity<ReportCii>().HasNoKey();
-
 		modelBuilder.Entity<SmOutBounddata>().HasNoKey();
 		modelBuilder.Entity<SerialNumberSearch>().HasNoKey();
 		modelBuilder.Entity<UserList>().HasNoKey();

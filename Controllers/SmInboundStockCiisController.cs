@@ -53,6 +53,89 @@ namespace StockManagementWebApi.Controllers
             return Ok(logRecords);
             //return await _context.SmInboundStockCiis.ToListAsync();
         }
+		[HttpPost("compare")]
+		public async Task<IActionResult> CompareMaterials([FromForm] ExcelCompareRequest data)
+		{
+			if (data.file == null || data.file.Length == 0)
+				return BadRequest("No file uploaded.");
+
+			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+			if (!Directory.Exists(uploadsDirectory))
+				Directory.CreateDirectory(uploadsDirectory);
+
+			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
+			await using (var stream = new FileStream(filePath, FileMode.Create))
+			{
+				await data.file.CopyToAsync(stream);
+			}
+
+			var excelData = new List<(string PoolName, string MaterialNumber, int ExcelStatus)>();
+			var resultList = new List<MaterialComparisonResult>();
+
+			try
+			{
+				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+				using var package = new ExcelPackage(new FileInfo(filePath));
+				var worksheet = package.Workbook.Worksheets[0];
+				int rowCount = worksheet.Dimension.Rows;
+
+				for (int row = 2; row <= rowCount; row++)
+				{
+					string poolName = worksheet.Cells[row, 2].Text?.Trim();
+					string materialNumber = worksheet.Cells[row, 3].Text?.Trim();
+					int.TryParse(worksheet.Cells[row, 12].Text?.Trim(), out int excelStatus);
+
+					if (!string.IsNullOrEmpty(materialNumber))
+					{
+						excelData.Add((poolName, materialNumber, excelStatus));
+					}
+				}
+
+				// 1. Build distinct, comma-separated material list for SQL
+				var distinctMaterialNumbers = excelData.Select(x => x.MaterialNumber).Distinct();
+				string materialParam = string.Join(",", distinctMaterialNumbers.Select(m => $"'{m}'"));
+
+				// 2. Query DB once
+				var dbData = await _context.StockCiiLists
+					.FromSqlRaw("EXEC MaterialCIIListBulk @p0, @p1", data.UserName, materialParam)
+					.ToListAsync();
+
+				// 3. Build a lookup dictionary
+				var dbLookup = dbData.ToDictionary(x => x.materialNumber, StringComparer.OrdinalIgnoreCase);
+
+				// 4. Match Excel to DB
+				foreach (var row in excelData)
+				{
+					dbLookup.TryGetValue(row.MaterialNumber, out var dbItem);
+
+					resultList.Add(new MaterialComparisonResult
+					{
+						PoolName = row.PoolName,
+						ExcelMaterialNumber = row.MaterialNumber,
+						ExcelStatus = row.ExcelStatus,
+						DbMaterialNumber = dbItem?.materialNumber,
+						newstock = dbItem?.newstock,
+						usedstock = dbItem?.usedstock,
+						Damaged = dbItem?.Damaged,
+						BreakFix = dbItem?.BreakFix
+					});
+				}
+
+				return Ok(resultList);
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, $"Error: {ex.Message}");
+			}
+			finally
+			{
+				if (System.IO.File.Exists(filePath))
+					System.IO.File.Delete(filePath);
+			}
+		}
+
+
+
 
 		[HttpPost("AddBulkMaterialStock")]
 		public async Task<IActionResult> Importstockdate1(AddStockInward data)
