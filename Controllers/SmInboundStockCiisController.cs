@@ -421,23 +421,35 @@ namespace StockManagementWebApi.Controllers
 
 
 
-		[HttpPost("UpdateInbounddata")]
-		public async Task<IActionResult> UpdateInbounddata([FromBody]UpdateInboundData data)
-		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec updateInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12", data.userName, data.MaterialNumber, data.SerialNumber, data.ExistSerialNumber,
-					data.RackLocation, data.DeliveryNumber, data.OrderNumber, data.InwardDate, data.InwardFrom, data.ReceivedBy, data.QualityChecker,data.QualityCheckerStatus,data.QualityCheckDate);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
-		}
+        [HttpPost("UpdateInbounddata")]
+        public async Task<IActionResult> UpdateInbounddata([FromBody] List<UpdateInboundData> data)
+        {
+            foreach (var datalist in data)
+            {
+                try
+                {
+                    await _context.Database.ExecuteSqlRawAsync(@"exec updateInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12", datalist.userName, datalist.MaterialNumber, datalist.SerialNumber, datalist.ExistSerialNumber,
+                        datalist.RackLocation, datalist.DeliveryNumber, datalist.OrderNumber, datalist.InwardDate, datalist.InwardFrom, datalist.ReceivedBy, datalist.QualityChecker, datalist.QualityCheckerStatus, datalist.QualityCheckDate);
+                    return Ok(datalist);
+                }
+                catch (Exception ex)
+                {
+                    // Log the exception or handle it as needed
+                    return StatusCode(500, "An error occurred while processing your request.");
+                }
+            }
+            return Ok("Bulk Data Uploaded Successfully");
+        }
 
-		[HttpPost("SearchSerialNumber/{username}/{SerialNumber}")]
+        [HttpGet("GetOverallCIIStock/{UserName}")]
+        public async Task<ActionResult> GetOverallCIIStock(string UserName)
+        {
+            var customers = _context.StockInboundCIILists.FromSqlRaw(@"exec Get_OverallCiiStock @p0", UserName).ToList();
+            return Ok(customers);
+
+        }
+
+        [HttpPost("SearchSerialNumber/{username}/{SerialNumber}")]
 		public async Task<ActionResult<SerialNumberSearch>> GetSmInboundStockCii(string username, string SerialNumber)
 		{
 			var customers = _context.StockInboundCIILists.FromSqlRaw(@"exec searchbyserialnumber @p0 , @p1", SerialNumber, username).ToList();
@@ -454,7 +466,10 @@ namespace StockManagementWebApi.Controllers
 		}
 
 
-		[HttpPost("Material/{MaterialNumber}/{MaterialDescription}/{userName}")]
+        
+
+
+        [HttpPost("Material/{MaterialNumber}/{MaterialDescription}/{userName}")]
 		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription, string userName)
 		{
 			try
