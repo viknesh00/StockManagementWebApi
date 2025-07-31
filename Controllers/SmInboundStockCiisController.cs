@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using OfficeOpenXml;
 using StockManagementWebApi.Models;
+using StockManagementWebApi.Models.NonStockCII;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace StockManagementWebApi.Controllers
@@ -142,7 +143,7 @@ namespace StockManagementWebApi.Controllers
 		{
 			if(data.file == null || data.file.Length == 0)
 				return  (BadRequest("No file uploaded."));
-            var userCodes = await _context.Database.SqlQueryRaw<int>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
+            var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
             // Define the uploads directory
             var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
 			// Create the directory if it doesn't exist
@@ -454,12 +455,12 @@ namespace StockManagementWebApi.Controllers
 		}
 
 
-		[HttpPost("Material/{MaterialNumber}/{MaterialDescription}/{userName}")]
-		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription, string userName)
+		[HttpPost("Material")]
+		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data)
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddMaterialNumberNew @p0, @p1, @p2", userName, MaterialNumber, MaterialDescription);
+				await _context.Database.ExecuteSqlRawAsync(@"exec AddMaterialNumberNew @p0, @p1, @p2", data.userName, data.MaterialNumber, data.MaterialDescription);
 				return Ok(); 
 			}
 			catch (SqlException ex) when (ex.Number == 50001)  // Unique Key Violation

@@ -39,12 +39,12 @@ namespace StockManagementWebApi.Controllers
 
 		}
 
-		[HttpPost("NonStockCIIMaterial/{MaterialNumber}/{MaterialDescription}/{userName}")]
-		public async Task<IActionResult> AddMaterialNumber(string MaterialNumber, string MaterialDescription, string userName)
+		[HttpPost("NonStockCIIMaterial")]
+		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data)
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddNonStockCII_MaterialNumber @p0, @p1, @p2", userName, MaterialNumber, MaterialDescription);
+				await _context.Database.ExecuteSqlRawAsync(@"exec AddNonStockCII_MaterialNumber @p0, @p1, @p2", data.userName, data.MaterialNumber, data.MaterialDescription);
 				return Ok();
 			}
 			catch (SqlException ex) when (ex.Number == 2627) // Unique Key Violation
