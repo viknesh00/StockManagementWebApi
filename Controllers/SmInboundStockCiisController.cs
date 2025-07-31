@@ -484,12 +484,12 @@ namespace StockManagementWebApi.Controllers
 				return StatusCode(500, $"An error occurred: {ex.Message}");
 			}
 		}
-        [HttpPost("update/{ExistMaterialNumber}/{MaterialNumber}/{MaterialDescription}/{userName}")]
-        public async Task<IActionResult> UpdateMaterialNumber(string ExistMaterialNumber, string MaterialNumber, string MaterialDescription, string userName)
+        [HttpPost("update")]
+        public async Task<IActionResult> UpdateMaterialNumber([FromBody] UpdateAddMaterial data)
         {
             try
             {
-                await _context.Database.ExecuteSqlRawAsync(@"exec updatematerialNumber @p0, @p1, @p2, @p3", userName, ExistMaterialNumber, MaterialNumber, MaterialDescription);
+                await _context.Database.ExecuteSqlRawAsync(@"exec updatematerialNumber @p0, @p1, @p2, @p3", data.userName, data.ExistMaterialNumber, data.MaterialNumber, data.MaterialDescription);
                 return Ok();
             }
             catch (Exception ex)
