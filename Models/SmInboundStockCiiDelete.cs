@@ -2,9 +2,9 @@
 {
     public class SmInboundStockCiiDelete
     {
-        public string DeliveryNumber { get; set; }
+        public string? DeliveryNumber { get; set; }
 
-        public string OrderNumber { get; set; }
+        public string? OrderNumber { get; set; }
 
         public string? SerialNumber { get; set; }
 
