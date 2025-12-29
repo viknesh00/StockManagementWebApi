@@ -5,6 +5,7 @@ namespace StockManagementWebApi.Models
 	public class ReportCii
 	{
 		public string MaterialNumber { get; set; }
+		public string MaterialDescription { get; set; }
 		public string SerialNumber { get; set; }
 		public int? MaterialKey { get; set; }
 		public string status { get; set; }
