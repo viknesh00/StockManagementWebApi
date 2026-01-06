@@ -459,12 +459,19 @@ namespace StockManagementWebApi.Controllers
 
 
 		// GET: api/SmInboundStockCiis/5
-		[HttpGet("{MaterialNumber}")]
-        public async Task<ActionResult<SmInboundStockCii>> GetSmInboundStockCii(string MaterialNumber)
-        {
-			var customers = _context.StockInboundCIILists.FromSqlRaw(@"exec StockCIIListBySerialNumber @p0", MaterialNumber).ToList();
+		[HttpGet("{MaterialNumber}/{SerialNumber}")]
+		public async Task<ActionResult<SmInboundStockCii>> GetSmInboundStockCiii(string MaterialNumber, string? SerialNumber)
+		{
+			SerialNumber =
+		string.IsNullOrWhiteSpace(SerialNumber) ||
+		SerialNumber.Equals("null", StringComparison.OrdinalIgnoreCase)
+		? null
+		: SerialNumber;
+			var customers = _context.StockInboundCIILists.FromSqlRaw(@"EXEC StockCIIListBySerialNumber @p0, @p1",MaterialNumber,SerialNumber).ToList();
+
 			return Ok(customers);
 		}
+
 
 
 		[HttpPost("Material")]
