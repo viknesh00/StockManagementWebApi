@@ -8,7 +8,7 @@
 		
 		
 		public string? ReceiverName { get; set; }
-		
+		public int OutBoundStockCIIKey { get; set; }
 		public string? OutBoundOrderNumber { get; set; }
 		public DateTime? OutBoundDate { get; set; }
 		public string? TargetLocation { get; set; }

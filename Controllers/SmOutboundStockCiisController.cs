@@ -133,7 +133,7 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-        [HttpDelete("DeleteOutboundData/{MaterialNumber}/{SerialNumber}/{OutBoundStockCIIKey}")]
+        [HttpPost("DeleteOutboundData/{MaterialNumber}/{SerialNumber}/{OutBoundStockCIIKey}")]
         public async Task<IActionResult> DeleteOutboundData( string MaterialNumber,string SerialNumber,int OutBoundStockCIIKey)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -261,7 +261,7 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-        [HttpDelete("DeleteReturnData/{MaterialNumber}/{SerialNumber}/{ReturnStockCIIKey}")]
+        [HttpPost("DeleteReturnData/{MaterialNumber}/{SerialNumber}/{ReturnStockCIIKey}")]
         public async Task<IActionResult> DeleteReturnData(string MaterialNumber,string SerialNumber,int ReturnStockCIIKey)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();

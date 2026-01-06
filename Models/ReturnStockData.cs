@@ -27,5 +27,6 @@
         public string? UpdatedBy { get; set; }
 
         public string RackLocation { get; set; }
+        public int ReturnStockCIIKey { get; set; }
     }
 }
