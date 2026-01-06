@@ -133,8 +133,51 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+        [HttpDelete("DeleteOutboundData/{MaterialNumber}/{SerialNumber}/{OutBoundStockCIIKey}")]
+        public async Task<IActionResult> DeleteOutboundData( string MaterialNumber,string SerialNumber,int OutBoundStockCIIKey)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
 
-		[HttpPost("UpdatedeliveryData")]
+            try
+            {
+                var deletedRows = await _context.Database.ExecuteSqlRawAsync(
+                    @"DELETE FROM sm_Outbound_StockCII 
+              WHERE serialNumber = @p0 
+              AND materialNumber = @p1 
+              AND OutBoundStockCIIKey = @p2",
+                    SerialNumber,
+                    MaterialNumber,
+                    OutBoundStockCIIKey);
+
+                if (deletedRows == 0)
+                {
+                    return NotFound("No outbound data found to delete.");
+                }
+
+                await _context.Database.ExecuteSqlRawAsync(
+                    @"UPDATE sm_Inbound_StockCII 
+              SET Status = 'New' 
+              WHERE serialNumber = @p0 
+              AND materialNumber = @p1",
+                    SerialNumber,
+                    MaterialNumber);
+
+                await transaction.CommitAsync();
+
+                return Ok("Outbound data deleted successfully.");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                // Log ex here
+
+                return StatusCode(500, "An error occurred while deleting outbound data.");
+            }
+        }
+
+
+
+        [HttpPost("UpdatedeliveryData")]
 		public async Task<ActionResult> UpdatedeliveryData([FromBody] UpdatedeliveryDataList data)
 		{
              
@@ -218,8 +261,53 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-		// GET: api/SmOutboundStockCiis/5
-		[HttpGet("{id}")]
+        [HttpDelete("DeleteReturnData/{MaterialNumber}/{SerialNumber}/{ReturnStockCIIKey}")]
+        public async Task<IActionResult> DeleteReturnData(string MaterialNumber,string SerialNumber,int ReturnStockCIIKey)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var deletedRows = await _context.Database.ExecuteSqlRawAsync(
+                    @"DELETE FROM sm_ReturnStock_CII  
+              WHERE SerialNumber = @p0 
+              AND MaterialNumber = @p1 
+              AND ReturnStockCIIKey = @p2",
+                    SerialNumber,
+                    MaterialNumber,
+                    ReturnStockCIIKey);
+
+                if (deletedRows == 0)
+                {
+                    return NotFound("No return data found to delete.");
+                }
+
+                await _context.Database.ExecuteSqlRawAsync(
+                    @"UPDATE sm_Inbound_StockCII 
+              SET Status = 'Outward' 
+              WHERE SerialNumber = @p0 
+              AND MaterialNumber = @p1",
+                    SerialNumber,
+                    MaterialNumber);
+
+                await transaction.CommitAsync();
+
+                return Ok("Return data deleted successfully.");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                // _logger.LogError(ex, "Error deleting return data");
+
+                return StatusCode(500, "An error occurred while deleting return data.");
+            }
+        }
+
+
+
+
+        // GET: api/SmOutboundStockCiis/5
+        [HttpGet("{id}")]
         public async Task<ActionResult<SmOutboundStockCii>> GetSmOutboundStockCii(string id)
         {
             var smOutboundStockCii = await _context.SmOutboundStockCiis.FindAsync(id);
