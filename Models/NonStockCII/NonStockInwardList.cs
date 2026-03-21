@@ -26,7 +26,9 @@
 
 		public int? DeliveredQuantity { get; set; }
 
-		public DateTime? CreatedDate { get; set; }
+        public int? TotalQuantity { get; set; }
+
+        public DateTime? CreatedDate { get; set; }
 
 		public DateTime? UpdatedDate { get; set; }
 
