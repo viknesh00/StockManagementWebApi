@@ -6,5 +6,6 @@
 		public int? usedstock { get; set; }
 		public string materialNumber { get; set; }
 		public string MaterialDescription { get; set; }
-	}
+        public string? RackLocation { get; set; }
+    }
 }

@@ -22,13 +22,15 @@ namespace StockManagementWebApi.Controllers
 		private readonly MydbContext _context;
 		private readonly IWebHostEnvironment _environment;
 		private readonly IConfiguration _configuration;
+        private readonly string _connectionString;
 
-		public SmInboundStockNonCiisController(IWebHostEnvironment environment, IConfiguration configuration, MydbContext context)
+        public SmInboundStockNonCiisController(IWebHostEnvironment environment, IConfiguration configuration, MydbContext context)
 		{
 			_environment = environment;
 			_configuration = configuration;
 			_context = context;
-		}
+            _connectionString = configuration.GetConnectionString("MyDBConnection");
+        }
 
 		// GET: api/SmInboundStockNonCiis
 		[HttpGet("GetSmInboundNonStockCiis/{UserName}")]
@@ -39,7 +41,52 @@ namespace StockManagementWebApi.Controllers
 
 		}
 
-		[HttpPost("NonStockCIIMaterial")]
+        [HttpPost("bulk-update")]
+        public async Task<IActionResult> BulkUpdate([FromBody] BulkUpdateRequest request)
+        {
+            if (request == null || string.IsNullOrEmpty(request.MaterialNumber) || request.SerialNumbers == null || !request.SerialNumbers.Any())
+                return BadRequest("Invalid request");
+
+            await BulkUpdateAsync(request);
+
+            return Ok("Updated successfully");
+        }
+        public async Task BulkUpdateAsync(BulkUpdateRequest request)
+        {
+            using (SqlConnection conn = new SqlConnection(_connectionString))
+            {
+                await conn.OpenAsync();
+
+                var serialList = string.Join(",", request.SerialNumbers.Select(s => $"'{s}'"));
+
+                var query = @"
+        UPDATE sm_InboundStock_NonCII
+        SET 
+            RackLocation = CASE 
+                              WHEN @RackLocation IS NOT NULL AND @RackLocation <> '' 
+                              THEN @RackLocation 
+                              ELSE RackLocation 
+                           END,
+            Status = CASE 
+                        WHEN @Status IS NOT NULL AND @Status <> '' 
+                        THEN @Status 
+                        ELSE Status 
+                     END
+        WHERE MaterialNumber = @MaterialNumber
+        AND SerialNumber IN (" + serialList + ")";
+
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@MaterialNumber", request.MaterialNumber);
+                    cmd.Parameters.AddWithValue("@RackLocation", (object?)request.RackLocation ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@Status", (object?)request.Status ?? DBNull.Value);
+
+                    await cmd.ExecuteNonQueryAsync();
+                }
+            }
+        }
+
+        [HttpPost("NonStockCIIMaterial")]
 		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data)
 		{
 			try
