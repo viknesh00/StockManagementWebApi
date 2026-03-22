@@ -54,7 +54,7 @@ namespace StockManagementWebApi.Controllers
                 var serialList = string.Join(",", request.SerialNumbers.Select(s => $"'{s}'"));
 
                 var query = @"
-        UPDATE sm_InboundStock_NonCII
+        UPDATE sm_Inbound_StockCII
         SET 
             RackLocation = CASE 
                               WHEN @RackLocation IS NOT NULL AND @RackLocation <> '' 
