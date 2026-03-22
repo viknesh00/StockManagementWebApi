@@ -9,8 +9,8 @@ namespace StockManagementWebApi.Models
 		public string SerialNumber { get; set; }
 		public int? MaterialKey { get; set; }
 		public string status { get; set; }
-		
-		public DateTime? InwardDate { get; set; }
+        public string? RackLocation { get; set; }
+        public DateTime? InwardDate { get; set; }
 		public DateTime? OutboundDate { get; set; }
 	}
 }

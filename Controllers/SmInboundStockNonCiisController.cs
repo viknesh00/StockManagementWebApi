@@ -47,12 +47,6 @@ namespace StockManagementWebApi.Controllers
             if (request == null || string.IsNullOrEmpty(request.MaterialNumber) || request.SerialNumbers == null || !request.SerialNumbers.Any())
                 return BadRequest("Invalid request");
 
-            await BulkUpdateAsync(request);
-
-            return Ok("Updated successfully");
-        }
-        public async Task BulkUpdateAsync(BulkUpdateRequest request)
-        {
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
                 await conn.OpenAsync();
@@ -84,7 +78,11 @@ namespace StockManagementWebApi.Controllers
                     await cmd.ExecuteNonQueryAsync();
                 }
             }
+
+            return Ok("Updated successfully");
         }
+
+        
 
         [HttpPost("NonStockCIIMaterial")]
 		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data)
