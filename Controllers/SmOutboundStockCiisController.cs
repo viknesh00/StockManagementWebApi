@@ -87,53 +87,68 @@ namespace StockManagementWebApi.Controllers
 		[HttpPost("AddOutboundData")]
 		public async Task<ActionResult> AddOutboundData([FromBody] AddDeliveryData data)
 		{
-			if (data == null)
-			{
-				return BadRequest("Invalid request data.");
-			}
+			if (data == null || data.SerialNumber == null || data.SerialNumber.Count == 0)
+				return BadRequest("At least one SerialNumber is required.");
 
 			try
 			{
-				// Validate if the serial number and material number exist
-				var status = await _context
-		.Database
-		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
-			data.SerialNumber, data.MaterialNumber)
-		.ToListAsync();
+				var serialList = data.SerialNumber;
+				var deliveryList = data.Fk_Inbound_StockCII_DeliveryNumber;
 
-
-				if (new[] { "Outward", "Defective", "Damaged","BreakFix" }.Contains(status[0], StringComparer.OrdinalIgnoreCase))
+				// ✅ Validate array length match
+				if (deliveryList != null && serialList.Count != deliveryList.Count)
 				{
-					return StatusCode(400, "The serial number is already Outward/Defective");
+					return BadRequest("SerialNumber and DeliveryNumber count mismatch.");
 				}
 
-				// Execute stored procedure to add inbound stock
-				await _context.Database.ExecuteSqlRawAsync(
-					"EXEC AddInboundStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10", data.UserName,
-					data.DeliveryNumber, data.MaterialNumber, data.SerialNumber, data.MaterialDescription, data.OrderNumber,
-					data.OutBounddate, data.TargetLocation, data.SentBy, data.Fk_Inbound_StockCII_DeliveryNumber, data.ReceiverName);
+				for (int i = 0; i < serialList.Count; i++)
+				{
+					var serial = serialList[i];
+					var deliveryNumber = deliveryList != null ? deliveryList[i] : data.DeliveryNumber;
 
-				// Update the material type to 'Not Available'
-				await _context.Database.ExecuteSqlRawAsync(
-					"UPDATE sm_Inbound_StockCII SET Status = 'Outward' WHERE serialNumber = @p0 AND materialNumber = @p1",
-					data.SerialNumber, data.MaterialNumber);
+					var status = await _context.Database
+						.SqlQueryRaw<string>(
+							"SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
+							serial, data.MaterialNumber)
+						.ToListAsync();
+
+					if (status.Count > 0 &&
+						new[] { "Outward", "Defective", "Damaged", "BreakFix" }
+						.Contains(status[0], StringComparer.OrdinalIgnoreCase))
+					{
+						return StatusCode(400, $"Serial {serial} already processed.");
+					}
+
+					await _context.Database.ExecuteSqlRawAsync(
+						"EXEC AddInboundStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10",
+						data.UserName,
+						data.DeliveryNumber,
+						data.MaterialNumber,
+						serial,
+						data.MaterialDescription,
+						data.OrderNumber,
+						data.OutBounddate,
+						data.TargetLocation,
+						data.SentBy,
+						deliveryNumber, // ✅ mapped per serial
+						data.ReceiverName
+					);
+
+					await _context.Database.ExecuteSqlRawAsync(
+						"UPDATE sm_Inbound_StockCII SET Status = 'Outward' WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
+						serial, data.MaterialNumber
+					);
+				}
 
 				return Ok("Outward data added successfully.");
 			}
-			catch (DbUpdateException dbEx)
-			{
-				// Log database exceptions
-				
-				return StatusCode(500, "A database error occurred while processing your request.");
-			}
 			catch (Exception ex)
 			{
-				
-				return StatusCode(500, "An unexpected error occurred while processing your request.");
+				return StatusCode(500, ex.Message);
 			}
 		}
 
-        [HttpPost("DeleteOutboundData/{MaterialNumber}/{SerialNumber}/{OutBoundStockCIIKey}")]
+		[HttpPost("DeleteOutboundData/{MaterialNumber}/{SerialNumber}/{OutBoundStockCIIKey}")]
         public async Task<IActionResult> DeleteOutboundData( string MaterialNumber,string SerialNumber,int OutBoundStockCIIKey)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
