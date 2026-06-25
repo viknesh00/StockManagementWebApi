@@ -5,6 +5,7 @@
 		public string? DeliveryNumber { get; set; } = null!;
 
 		public string? OrderNumber { get; set; } = null!;
+		public string? PoNumber { get; set; } = null!;
 
 		public string? SerialNumber { get; set; }
 
@@ -13,7 +14,7 @@
 		public string? MaterialDescription { get; set; }
 
 		public DateTime? InwardDate { get; set; }
-
+		public string? Location { get; set; }
 		public string? RackLocation { get; set; }
 
 		public string? SourceLocation { get; set; }

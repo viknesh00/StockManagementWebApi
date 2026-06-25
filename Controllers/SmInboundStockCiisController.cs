@@ -288,9 +288,9 @@ namespace StockManagementWebApi.Controllers
 
 				foreach (var stock in inboundStocks)
 				{
-                    await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12",data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, 
+                    await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14",data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, 
 						data.MaterialDescription, stock["SerialNumber"],
-				stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation);
+				stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation, data.PoNumber, data.Location);
 
                     //var query = @"
                     //                  INSERT INTO sm_Inbound_StockCII (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription,SerialNumber,Quantity,InwardDate,SourceLocation,ReceivedBy,Status,RackLocation,Fk_UserCode)
@@ -375,8 +375,8 @@ namespace StockManagementWebApi.Controllers
 					return BadRequest("User not found.");
 				}
 
-                await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12", data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,
-				data.Quantity, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.Status, userCode[0], data.RacKLocation);
+                await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14", data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,
+				data.Quantity, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.Status, userCode[0], data.RacKLocation, data.PoNumber, data.Location);
 
                 //var connectionString = _configuration.GetConnectionString("MyDBConnection");
 
@@ -459,15 +459,15 @@ namespace StockManagementWebApi.Controllers
 
 
 		// GET: api/SmInboundStockCiis/5
-		[HttpGet("{MaterialNumber}/{SerialNumber}")]
-		public async Task<ActionResult<SmInboundStockCii>> GetSmInboundStockCiii(string MaterialNumber, string? SerialNumber)
+		[HttpGet("{MaterialNumber}/{SerialNumber}/{name}")]
+		public async Task<ActionResult<SmInboundStockCii>> GetSmInboundStockCiii(string MaterialNumber, string? SerialNumber, string name)
 		{
 			SerialNumber =
 		string.IsNullOrWhiteSpace(SerialNumber) ||
 		SerialNumber.Equals("null", StringComparison.OrdinalIgnoreCase)
 		? null
 		: SerialNumber;
-			var customers = _context.StockInboundCIILists.FromSqlRaw(@"EXEC StockCIIListBySerialNumber @p0, @p1",MaterialNumber,SerialNumber).ToList();
+			var customers = _context.StockInboundCIILists.FromSqlRaw(@"EXEC StockCIIListBySerialNumber @p0, @p1, @p2",MaterialNumber,SerialNumber,name).ToList();
 
 			return Ok(customers);
 		}

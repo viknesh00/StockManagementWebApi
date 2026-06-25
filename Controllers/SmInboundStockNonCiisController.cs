@@ -102,10 +102,10 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
-		[HttpGet("GetInwardNonStockCiis/{MaterialNumber}")]
-		public async Task<ActionResult> GetInwardNonStockCiis(string MaterialNumber)
+		[HttpGet("GetInwardNonStockCiis/{MaterialNumber}/{name}")]
+		public async Task<ActionResult> GetInwardNonStockCiis(string MaterialNumber, string name)
 		{
-			var customers = _context.NonStockInwardLists.FromSqlRaw(@"exec sp_getInboundStock_NonCII @p0", MaterialNumber).ToList();
+			var customers = _context.NonStockInwardLists.FromSqlRaw(@"exec sp_getInboundStock_NonCII @p0,@p1", MaterialNumber, name).ToList();
 			return Ok(customers);
 
 		}

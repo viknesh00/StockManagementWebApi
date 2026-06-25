@@ -35,8 +35,9 @@ public partial class MydbContext : DbContext
     public virtual DbSet<SmReturnStockCii> SmReturnStockCiis { get; set; }
 
     public virtual DbSet<ReturnStockData> ReturnStockDatas { get; set; }
+	public virtual DbSet<StagingStockData> StagingStockDatas { get; set; }
 
-    public virtual DbSet<SmTenent> SmTenents { get; set; }
+	public virtual DbSet<SmTenent> SmTenents { get; set; }
 
     public virtual DbSet<SmUser> SmUsers { get; set; }
 
@@ -82,7 +83,8 @@ public partial class MydbContext : DbContext
 		modelBuilder.Entity<InboundCIIList>().HasNoKey();
 		modelBuilder.Entity<StockInboundCIIList>().HasNoKey();
         modelBuilder.Entity<ReturnStockData>().HasNoKey();
-        modelBuilder.Entity<NonStockCIIList>().HasNoKey();
+		modelBuilder.Entity<StagingStockData>().HasNoKey();
+		modelBuilder.Entity<NonStockCIIList>().HasNoKey();
 		modelBuilder.Entity<UpdateReturnDataList>().HasNoKey();
         modelBuilder.Entity<Log_record>().HasNoKey();
 

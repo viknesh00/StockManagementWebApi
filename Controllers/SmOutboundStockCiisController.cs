@@ -68,13 +68,15 @@ namespace StockManagementWebApi.Controllers
                 var CIIdata = _context.InboundCIILists.FromSqlRaw(@"exec sp_inboundstockList @p0, @p1, @p2", MaterialNumber, SerialNumber, OrderNumber).ToList();
 				var Deliverydata = _context.OutboundDataLists.FromSqlRaw(@"exec sp_outboundstockList @p0, @p1", MaterialNumber, SerialNumber).ToList();
 				var Inbounddata = _context.ReturnStockDatas.FromSqlRaw(@"exec deliverystockCII @p0,@p1", MaterialNumber, SerialNumber).ToList();
+				var Stagingdata = _context.StagingStockDatas.FromSqlRaw(@"exec stagingstockCII @p0,@p1", MaterialNumber, SerialNumber).ToList();
 
 				return Ok(
                     new
                     {
 						CIIData= CIIdata,
 						InboundData = Inbounddata,
-						DeliveryData= Deliverydata
+						DeliveryData= Deliverydata,
+						StagingData= Stagingdata
 					});
 
 			}
@@ -318,11 +320,101 @@ namespace StockManagementWebApi.Controllers
             }
         }
 
+		[HttpPost("AddStaging")]
+		public async Task<IActionResult> AddStaging([FromBody] StagingModel data)
+		{
+			try
+			{
+				var userCode = await _context.Database
+					.SqlQueryRaw<string>(
+						"SELECT Pk_UserCode FROM sm_users WHERE LoginId = @p0",
+						data.UserName)
+					.FirstOrDefaultAsync();
+
+				if (string.IsNullOrEmpty(userCode))
+					return BadRequest("Invalid User.");
+
+				await _context.Database.ExecuteSqlRawAsync(
+					@"EXEC AddStaging
+        @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7",
+					data.MaterialNumber,
+					data.SerialNumber,
+					data.OrderNumber,
+					data.Type,
+					data.DeviceStatus,
+					data.QCDate,
+					data.QCBy,
+					userCode);
+
+				return Ok(new
+				{
+					Success = true,
+					Message = "Staging record added successfully."
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, ex.Message);
+			}
+		}
+
+		[HttpPut("UpdateStaging")]
+		public async Task<IActionResult> UpdateStaging([FromBody] StagingModel data)
+		{
+			try
+			{
+			
+				await _context.Database.ExecuteSqlRawAsync(
+					@"EXEC UpsertStaging
+        @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
+					data.MaterialNumber,
+					data.SerialNumber,
+					data.OrderNumber,
+					data.Type,
+					data.DeviceStatus,
+					data.QCDate,
+					data.QCBy,
+					data.Date,
+				    data.UserName);
+
+				return Ok(new
+				{
+					Success = true,
+					Message = "Staging record updated successfully."
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, ex.Message);
+			}
+		}
+
+		[HttpDelete("DeleteStaging/{id}")]
+		public async Task<IActionResult> DeleteStaging(int id)
+		{
+			try
+			{
+				await _context.Database.ExecuteSqlRawAsync(
+					@"EXEC DeleteStaging @p0",
+					id);
+
+				return Ok(new
+				{
+					Success = true,
+					Message = "Staging record deleted successfully."
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, ex.Message);
+			}
+		}
 
 
 
-        // GET: api/SmOutboundStockCiis/5
-        [HttpGet("{id}")]
+
+		// GET: api/SmOutboundStockCiis/5
+		[HttpGet("{id}")]
         public async Task<ActionResult<SmOutboundStockCii>> GetSmOutboundStockCii(string id)
         {
             var smOutboundStockCii = await _context.SmOutboundStockCiis.FindAsync(id);
