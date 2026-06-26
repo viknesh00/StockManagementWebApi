@@ -150,6 +150,93 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+		[HttpPost("BulkOutwardData")]
+		public async Task<ActionResult> BulkOutwardData([FromBody] BulkAddDeliveryData data)
+		{
+			if (data == null || data.SerialNumber == null || data.SerialNumber.Count == 0)
+				return BadRequest("At least one SerialNumber is required.");
+
+			try
+			{
+				var serialList = data.SerialNumber;
+				var deliveryList = data.Fk_Inbound_StockCII_DeliveryNumber;
+				var materialNumberList = data.MaterialNumber;
+				var materialDescriptionList = data.MaterialDescription;
+
+				// Validate list count
+				if (materialNumberList == null || materialNumberList.Count != serialList.Count)
+				{
+					return BadRequest("MaterialNumber and SerialNumber count mismatch.");
+				}
+
+				if (materialDescriptionList == null || materialDescriptionList.Count != serialList.Count)
+				{
+					return BadRequest("MaterialDescription and SerialNumber count mismatch.");
+				}
+
+				if (deliveryList != null && deliveryList.Count != serialList.Count)
+				{
+					return BadRequest("SerialNumber and DeliveryNumber count mismatch.");
+				}
+
+				for (int i = 0; i < serialList.Count; i++)
+				{
+					var serial = serialList[i];
+					var materialNumber = materialNumberList[i];
+					var materialDescription = materialDescriptionList[i];
+					var deliveryNumber = deliveryList != null
+						? deliveryList[i]
+						: data.DeliveryNumber;
+
+					var status = await _context.Database
+						.SqlQueryRaw<string>(
+							"SELECT Status FROM sm_Inbound_StockCII WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
+							serial,
+							materialNumber)
+						.ToListAsync();
+
+					if (status.Count > 0 &&
+						new[] { "Outward", "Defective", "Damaged", "BreakFix" }
+						.Contains(status[0], StringComparer.OrdinalIgnoreCase))
+					{
+						return BadRequest($"Serial {serial} already processed.");
+					}
+
+					// Insert into Outbound table
+					await _context.Database.ExecuteSqlRawAsync(
+						@"EXEC BulkAddInboundStockCII
+                    @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12",
+						data.UserName,
+						data.DeliveryNumber,
+						materialNumber,
+						serial,
+						materialDescription,
+						data.OrderNumber,
+						data.OutBounddate,
+						data.TargetLocation,
+						data.SentBy,
+						deliveryNumber,
+						data.ReceiverName,
+						data.Status,
+						data.SubStatus
+					);
+
+					// Existing logic - unchanged
+					await _context.Database.ExecuteSqlRawAsync(
+						"UPDATE sm_Inbound_StockCII SET Status = 'Outward' WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
+						serial,
+						materialNumber
+					);
+				}
+
+				return Ok("Outward data added successfully.");
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, ex.Message);
+			}
+		}
+
 		[HttpPost("DeleteOutboundData/{MaterialNumber}/{SerialNumber}/{OutBoundStockCIIKey}")]
         public async Task<IActionResult> DeleteOutboundData( string MaterialNumber,string SerialNumber,int OutBoundStockCIIKey)
         {
