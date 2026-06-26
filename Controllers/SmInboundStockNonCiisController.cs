@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Threading.Tasks;
@@ -82,7 +83,88 @@ namespace StockManagementWebApi.Controllers
             return Ok("Updated successfully");
         }
 
-        
+
+        [HttpPost("BulkImportNonCII")]
+        public async Task<IActionResult> BulkImportNonCII([FromForm] AddNonCIIStockInward data)
+        {
+            if (data.file == null || data.file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            
+
+            var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+
+            if (!Directory.Exists(uploadsDirectory))
+                Directory.CreateDirectory(uploadsDirectory);
+
+            var filePath = Path.Combine(uploadsDirectory, Guid.NewGuid() + Path.GetExtension(data.file.FileName));
+
+            try
+            {
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await data.file.CopyToAsync(stream);
+                }
+
+                ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+
+                using var package = new ExcelPackage(new FileInfo(filePath));
+
+                var worksheet = package.Workbook.Worksheets[0];
+
+                if (worksheet.Dimension == null)
+                    return BadRequest("Excel file is empty.");
+
+                int rowCount = worksheet.Dimension.Rows;
+
+                for (int row = 2; row <= rowCount; row++)
+                {
+                    var materialNumber = worksheet.Cells[row, 1].Text.Trim();
+
+                    if (string.IsNullOrWhiteSpace(materialNumber))
+                        continue;
+
+                    int quantity = 0;
+                    int.TryParse(worksheet.Cells[row, 2].Text, out quantity);
+
+                    var status = worksheet.Cells[row, 3].Text.Trim();
+
+                    await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12", data.DeliveryNumber, data.OrderNumber, materialNumber,
+                    data.MaterialDescription, data.InwardDate, data.InwardFrom, data.ReceivedBy, data.RackLocation, quantity, data.UserName,data.PoNumber,data.Location,status);
+
+                    
+                }
+
+                return Ok(new
+                {
+                    Success = true,
+                    Message = "Bulk upload completed successfully."
+                });
+            }
+            catch (SqlException ex)
+            {
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            finally
+            {
+                if (System.IO.File.Exists(filePath))
+                    System.IO.File.Delete(filePath);
+            }
+        }
+
+
 
         [HttpPost("NonStockCIIMaterial")]
 		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data)
