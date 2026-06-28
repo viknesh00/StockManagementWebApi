@@ -198,8 +198,8 @@ namespace StockManagementWebApi.Controllers
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.MaterialDescription, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived, data.UserName);
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
+					data.MaterialDescription, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived, data.UserName, data.PoNumber, data.Location, data.Status);
 				return Ok();
 			}
 			catch (Exception ex)
@@ -320,6 +320,160 @@ namespace StockManagementWebApi.Controllers
 			}
 		}
 
+
+		// add Bulk outbound non-ci data 
+		[HttpPost("BulkAddNonStockOutbound")]
+
+		public async Task<IActionResult> BulkAddNonStockOutbound([FromBody] List<AddOutBoundNonStockCII> dataList)
+
+		{
+
+			if (dataList == null || dataList.Count == 0)
+
+				return BadRequest("No data received.");
+
+			using var transaction = await _context.Database.BeginTransactionAsync();
+
+			try
+
+			{
+
+				foreach (var data in dataList)
+
+				{
+
+					// Fetch inbound stock
+
+					var customers = await _context.SmOutBounddatas
+
+					.FromSqlRaw(@"
+
+                    SELECT *
+
+                    FROM sm_InboundStock_NonCII
+
+                    WHERE MaterialNumber = @p0
+
+                      AND IsActive = 1",
+
+					data.MaterialNumber)
+
+					.ToListAsync();
+
+					if (customers.Count == 0)
+
+						throw new Exception($"No inbound stock found for Material Number : {data.MaterialNumber}");
+
+					int totalInboundQuantity = customers.Sum(x => x.DeliveredQuantity);
+
+					if (totalInboundQuantity < data.DeliveredQuantity)
+
+					{
+
+						throw new Exception($"Insufficient stock for Material Number : {data.MaterialNumber}");
+
+					}
+
+					int remainingQuantity = data.DeliveredQuantity ?? 0;
+
+					foreach (var stock in customers)
+
+					{
+
+						if (remainingQuantity == 0)
+
+							break;
+
+						if (stock.DeliveredQuantity <= remainingQuantity)
+
+						{
+
+							remainingQuantity -= stock.DeliveredQuantity;
+
+							stock.DeliveredQuantity = 0;
+
+						}
+
+						else
+
+						{
+
+							stock.DeliveredQuantity -= remainingQuantity;
+
+							remainingQuantity = 0;
+
+						}
+
+					}
+
+					// Insert outbound
+
+					await _context.Database.ExecuteSqlRawAsync(
+
+					@"EXEC Sp_AddOutboundStock_NonCII
+
+                    @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10",
+
+					data.UserName,
+
+					data.DeliveryNumber,
+
+					data.OrderNumber,
+
+					data.MaterialNumber,
+
+					data.MaterialDescription,
+
+					data.OutboundDate,
+
+					data.ReceiverName,
+
+					data.TargetLocation,
+
+					data.DeliveredQuantity,
+
+					data.SentBy,
+
+					data.DeliveryNumber_inbound);
+
+					// Update inbound quantity
+
+					foreach (var stock in customers)
+
+					{
+
+						await _context.Database.ExecuteSqlRawAsync(
+
+						@"UPDATE sm_InboundStock_NonCII
+
+                      SET DeliveredQuantity = @p0
+
+                      WHERE InboundStockNonCIIKey = @p1",
+
+						stock.DeliveredQuantity,
+
+						stock.InboundStockNonCIIKey);
+
+					}
+				}
+
+				await transaction.CommitAsync();
+
+				return Ok("Bulk upload completed successfully.");
+
+			}
+
+			catch (Exception ex)
+
+			{
+
+				await transaction.RollbackAsync();
+
+				return StatusCode(500, ex.Message);
+
+			}
+
+		}
 
 
 
