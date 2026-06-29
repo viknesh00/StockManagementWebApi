@@ -5,6 +5,7 @@
 		public string MaterialNumber { get; set; }
 		public string MaterialDescription { get; set; }
 		public string? DeliveryNumber { get; set; }
+		public string? PoNumber { get; set; }
 		public string OrderNumber { get; set; }
 		public DateTime? Inwarddate { get; set; }
 		public string? InwardFrom { get; set; }
