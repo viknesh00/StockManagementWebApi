@@ -13,7 +13,6 @@
 		public string? ReceivedBy { get; set; }
 		public string? RacKLocation { get; set; }
 		public string? UserName { get; set; }
-		public string? PoNumber { get; set; }
 		public string? Location { get; set; }
 
 		public string Status { get; set; }
