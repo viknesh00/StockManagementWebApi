@@ -323,7 +323,7 @@ namespace StockManagementWebApi.Controllers
 		// add Bulk outbound non-ci data 
 		[HttpPost("BulkAddNonStockOutbound")]
 
-		public async Task<IActionResult> BulkAddNonStockOutbound([FromBody] List<AddOutBoundNonStockCII> dataList)
+		public async Task<IActionResult> BulkAddNonStockOutbound([FromBody] List<BulkAddOutboundDataNonStockCii> dataList)
 
 		{
 
@@ -409,9 +409,9 @@ namespace StockManagementWebApi.Controllers
 
 					await _context.Database.ExecuteSqlRawAsync(
 
-						@"EXEC Sp_AddOutboundStock_NonCII
+						@"EXEC Sp_BulkAddOutboundStock_NonCII
 
-                    @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10",
+                    @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12",
 
 						data.UserName,
 
@@ -433,7 +433,9 @@ namespace StockManagementWebApi.Controllers
 
 						data.SentBy,
 
-						data.DeliveryNumber_inbound);
+						data.DeliveryNumber_inbound,
+						data.Status,
+						data.SubStatus);
 
 					// Update inbound quantity
 
