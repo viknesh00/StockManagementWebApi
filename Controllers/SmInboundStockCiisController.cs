@@ -141,77 +141,93 @@ namespace StockManagementWebApi.Controllers
 		[HttpPost("AddBulkMaterialStock")]
 		public async Task<IActionResult> Importstockdate1(AddStockInward data)
 		{
-			if(data.file == null || data.file.Length == 0)
-				return  (BadRequest("No file uploaded."));
-            var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
-            // Define the uploads directory
-            var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
-			// Create the directory if it doesn't exist
+			if (data.file == null || data.file.Length == 0)
+				return BadRequest("No file uploaded.");
+
+			var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
+
+			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
 			if (!Directory.Exists(uploadsDirectory))
 			{
 				Directory.CreateDirectory(uploadsDirectory);
 			}
-			// Full file path
+
 			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
 			try
 			{
-				// Save the uploaded file
 				using (var stream = new FileStream(filePath, FileMode.Create))
 				{
 					data.file.CopyTo(stream);
 				}
-				// Read data from Excel
+
 				var inboundStocks = new List<Dictionary<string, object>>();
 				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
 				using (var package = new ExcelPackage(new FileInfo(filePath)))
 				{
-					var worksheet = package.Workbook.Worksheets[0]; // Assuming data is in the first sheet
+					var worksheet = package.Workbook.Worksheets[0];
 					var rowCount = worksheet.Dimension.Rows;
-					for (int row = 2; row <= rowCount; row++) // Assuming first row is the header
+					for (int row = 2; row <= rowCount; row++)
 					{
 						if (worksheet.Cells[row, 1].Text != "")
 						{
 							var stock = new Dictionary<string, object>
-							{
-
-								{ "MaterialNumber", worksheet.Cells[row, 1].Text },
-								{ "SerialNumber", worksheet.Cells[row, 2].Text },
-								{ "Quantity", int.TryParse(worksheet.Cells[row, 3].Text, out int qty) ? qty : 0 },
-								{ "Status", worksheet.Cells[row, 4].Text }
-							};
+					{
+						{ "MaterialNumber", worksheet.Cells[row, 1].Text },
+						{ "MaterialDescription", worksheet.Cells[row, 2].Text },
+						{ "SerialNumber", worksheet.Cells[row, 3].Text },
+						{ "Quantity", int.TryParse(worksheet.Cells[row, 4].Text, out int qty) ? qty : 0 },
+						{ "Status", worksheet.Cells[row, 5].Text }
+					};
 							inboundStocks.Add(stock);
 						}
 					}
-
-
 				}
+
 				if (inboundStocks.Count == 0)
 					return BadRequest("The Excel file contains no data.");
 
+				var tenentcode = await _context.Database
+					.SqlQuery<string>($"SELECT Fk_TenentCode AS Value FROM [dbo].[sm_Users] WHERE LoginId = {data.UserName}")
+					.FirstOrDefaultAsync();
+
 				foreach (var stock in inboundStocks)
 				{
-					await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12", data.UserName, data.DeliveryNumber, data.OrderNumber, stock["MaterialNumber"],
-						data.MaterialDescription, stock["SerialNumber"],
-				stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation);
+					var isMaterialNumberAvailable = await _context.Database
+						.SqlQuery<int>($@"
+SELECT 1 AS Value
+FROM [dbo].[sm_material_master] smm
+INNER JOIN [dbo].[sm_Users] su ON su.Pk_UserCode = smm.Fk_UserCode
+WHERE smm.MaterialNumber = {stock["MaterialNumber"]}
+  AND su.Fk_TenentCode = {tenentcode}")
+						.AnyAsync();
+
+					if (!isMaterialNumberAvailable)
+					{
+						await _context.Database.ExecuteSqlRawAsync(
+							@"EXEC AddMaterialNumberNew @p0, @p1, @p2",
+							data.UserName, stock["MaterialNumber"], stock["MaterialDescription"]);
+					}
+
+					await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14",
+						data.UserName, data.DeliveryNumber, data.OrderNumber, stock["MaterialNumber"],
+						stock["MaterialDescription"], stock["SerialNumber"],
+						stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation, data.PoNumber, data.Location);
 				}
 
 				return Ok("Data imported successfully.");
 			}
-
 			catch (Exception ex)
 			{
-				return (StatusCode(500, $"An error occurred: {ex.Message}"));
+				return StatusCode(500, $"An error occurred: {ex.Message}");
 			}
 			finally
 			{
-                if (System.IO.File.Exists(filePath))
-                    System.IO.File.Delete(filePath);
+				if (System.IO.File.Exists(filePath))
+					System.IO.File.Delete(filePath);
+			}
+		}
 
-            }
-
-        }
-
-        [HttpPost("import")]
+		[HttpPost("import")]
 		public async Task<IActionResult> ImportStockData( AddStockInward data)
 		{
 

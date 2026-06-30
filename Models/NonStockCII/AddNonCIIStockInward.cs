@@ -10,7 +10,7 @@
 
         public string OrderNumber { get; set; }
 
-        public string MaterialDescription { get; set; }
+        public string? MaterialDescription { get; set; }
 
         public DateTime? InwardDate { get; set; }
 
