@@ -10,6 +10,7 @@ namespace StockManagementWebApi.Models
 		public int? MaterialKey { get; set; }
 		public string status { get; set; }
         public string? RackLocation { get; set; }
+        public string? Location { get; set; }
         public DateTime? InwardDate { get; set; }
 		public DateTime? OutboundDate { get; set; }
 	}

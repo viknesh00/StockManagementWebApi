@@ -238,8 +238,8 @@ WHERE smm.MaterialNumber = {materialNumber}
 		{
 			try
 			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11", data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.ExistDeliveryNumber, data.ExistOrderNumber, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived, data.InboundStockNonCIIKey);
+				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14", data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
+					data.ExistDeliveryNumber, data.ExistOrderNumber, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived, data.InboundStockNonCIIKey,data.PoNumber,data.Status,data.Location);
 				return Ok();
 			}
 			catch (Exception ex)

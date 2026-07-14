@@ -6,7 +6,7 @@
 
 		public string? OrderNumber { get; set; }
 
-		//public string? SerialNumber { get; set; }
+		public string? PoNumber { get; set; }
 
 		public string? MaterialNumber { get; set; }
 
@@ -17,8 +17,8 @@
 		public string? RackLocation { get; set; }
 
 		public string? SourceLocation { get; set; }
-
-		public int? Quantity { get; set; }
+        public string? Location { get; set; }
+        public int? Quantity { get; set; }
 
 		public string? ReceivedBy { get; set; }
 
