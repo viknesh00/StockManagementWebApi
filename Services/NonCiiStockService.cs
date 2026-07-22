@@ -5,6 +5,7 @@ using StockManagementWebApi.Common.Exceptions;
 using StockManagementWebApi.Common.Files;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.NonStockCII;
+using StockManagementWebApi.Models.Notifications;
 using StockManagementWebApi.Models.Responses;
 
 namespace StockManagementWebApi.Services
@@ -80,12 +81,18 @@ namespace StockManagementWebApi.Services
 	{
 		private readonly MydbContext _context;
 		private readonly IUploadedFileStore _fileStore;
+		private readonly INotificationPublisher _notifications;
 		private readonly ILogger<NonCiiStockService> _logger;
 
-		public NonCiiStockService(MydbContext context, IUploadedFileStore fileStore, ILogger<NonCiiStockService> logger)
+		public NonCiiStockService(
+			MydbContext context,
+			IUploadedFileStore fileStore,
+			INotificationPublisher notifications,
+			ILogger<NonCiiStockService> logger)
 		{
 			_context = context;
 			_fileStore = fileStore;
+			_notifications = notifications;
 			_logger = logger;
 		}
 
@@ -210,6 +217,16 @@ WHERE smm.MaterialNumber = {materialNumber}
 				_logger.LogInformation(
 					"Non-CII bulk import completed for {UserName}: {RowCount} row(s).",
 					data.UserName, rows.Count);
+
+				await _notifications.PublishAsync(
+					data.UserName,
+					NotificationTypes.StockInward,
+					NotificationSeverities.Success,
+					"Bulk non-CII stock inwarded",
+					$"{rows.Count} non-CII material line(s) were inwarded against delivery {data.DeliveryNumber}.",
+					referenceType: "NonCiiInward",
+					referenceId: data.DeliveryNumber,
+					cancellationToken: cancellationToken);
 			}
 			catch (SqlException exception) when (exception.IsApplicationRaised())
 			{
@@ -263,6 +280,17 @@ WHERE smm.MaterialNumber = {materialNumber}
 				cancellationToken);
 
 			_logger.LogInformation("Non-CII inbound recorded for material {MaterialNumber}.", data.MaterialNumber);
+
+			await _notifications.PublishAsync(
+				data.UserName,
+				NotificationTypes.StockInward,
+				NotificationSeverities.Success,
+				"Non-CII stock inwarded",
+				$"{data.QuantityReceived} unit(s) of material {data.MaterialNumber} were inwarded against delivery {data.DeliveryNumber}.",
+				materialNumber: data.MaterialNumber,
+				referenceType: "NonCiiInward",
+				referenceId: data.DeliveryNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		public async Task DeleteInboundAsync(string materialNumber, string deliveryNumber, string inboundStockNonCiiKey, string userName, CancellationToken cancellationToken = default)
@@ -369,6 +397,17 @@ WHERE smm.MaterialNumber = {materialNumber}
 			_logger.LogInformation(
 				"Non-CII outbound recorded for material {MaterialNumber}, quantity {Quantity}.",
 				data.MaterialNumber, data.DeliveredQuantity);
+
+			await _notifications.PublishAsync(
+				data.UserName,
+				NotificationTypes.StockOutward,
+				NotificationSeverities.Info,
+				"Non-CII stock delivered",
+				$"{data.DeliveredQuantity} unit(s) of material {data.MaterialNumber} were delivered to {data.TargetLocation ?? "the target location"}.",
+				materialNumber: data.MaterialNumber,
+				referenceType: "NonCiiOutward",
+				referenceId: data.DeliveryNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		public async Task BulkAddOutboundAsync(List<BulkAddOutboundDataNonStockCii> dataList, CancellationToken cancellationToken = default)
@@ -450,6 +489,17 @@ WHERE smm.MaterialNumber = {materialNumber}
 			await transaction.CommitAsync(cancellationToken);
 
 			_logger.LogInformation("Non-CII bulk outward completed for {RowCount} row(s).", dataList.Count);
+
+			// Published after the commit, so a rolled-back batch leaves no notification behind.
+			await _notifications.PublishAsync(
+				dataList[0].UserName,
+				NotificationTypes.StockOutward,
+				NotificationSeverities.Info,
+				"Bulk non-CII stock delivered",
+				$"{dataList.Count} non-CII material line(s) were delivered.",
+				referenceType: "NonCiiOutward",
+				referenceId: dataList[0].DeliveryNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		public async Task<IReadOnlyList<GetNonStockDeliveredData>> GetDeliveredListAsync(string materialNumber, CancellationToken cancellationToken = default)
@@ -657,6 +707,20 @@ WHERE smm.MaterialNumber = {materialNumber}
 				cancellationToken);
 
 			_logger.LogInformation("Non-CII return recorded for material {MaterialNumber}.", data.MaterialNumber);
+
+			var isFaulty = data.ReturnType is not null &&
+				new[] { "Damaged", "BreakFix", "Defective" }.Contains(data.ReturnType, StringComparer.OrdinalIgnoreCase);
+
+			await _notifications.PublishAsync(
+				null, // this payload carries no user; the publisher uses the token identity
+				NotificationTypes.StockReturn,
+				isFaulty ? NotificationSeverities.Warning : NotificationSeverities.Info,
+				isFaulty ? $"Non-CII stock returned as {data.ReturnType}" : "Non-CII stock returned",
+				$"{data.ReturnQuantity} unit(s) of material {data.MaterialNumber} were returned from {data.ReturnLocation ?? "an unspecified location"}.",
+				materialNumber: data.MaterialNumber,
+				referenceType: "NonCiiReturn",
+				referenceId: data.OrderNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		public async Task UpdateReturnAsync(UpdateNonStockRetundata data, CancellationToken cancellationToken = default)

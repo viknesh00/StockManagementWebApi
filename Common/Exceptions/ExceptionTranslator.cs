@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 namespace StockManagementWebApi.Common.Exceptions
 {
@@ -76,6 +77,22 @@ namespace StockManagementWebApi.Common.Exceptions
 					return new TranslatedException(
 						StatusCodes.Status403Forbidden,
 						"You do not have permission to perform this action.",
+						NoErrors,
+						LogLevel.Warning);
+
+				// Token problems on the request path are handled by the JWT bearer events, which
+				// never throw. These cases cover tokens validated manually elsewhere.
+				case SecurityTokenExpiredException:
+					return new TranslatedException(
+						StatusCodes.Status401Unauthorized,
+						"Your session has expired. Please refresh your session or sign in again.",
+						NoErrors,
+						LogLevel.Information);
+
+				case SecurityTokenException:
+					return new TranslatedException(
+						StatusCodes.Status401Unauthorized,
+						"The security token is not valid.",
 						NoErrors,
 						LogLevel.Warning);
 

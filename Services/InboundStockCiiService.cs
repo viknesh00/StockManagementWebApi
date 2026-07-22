@@ -5,6 +5,7 @@ using StockManagementWebApi.Common.Exceptions;
 using StockManagementWebApi.Common.Files;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.NonStockCII;
+using StockManagementWebApi.Models.Notifications;
 
 namespace StockManagementWebApi.Services
 {
@@ -62,12 +63,18 @@ namespace StockManagementWebApi.Services
 
 		private readonly MydbContext _context;
 		private readonly IUploadedFileStore _fileStore;
+		private readonly INotificationPublisher _notifications;
 		private readonly ILogger<InboundStockCiiService> _logger;
 
-		public InboundStockCiiService(MydbContext context, IUploadedFileStore fileStore, ILogger<InboundStockCiiService> logger)
+		public InboundStockCiiService(
+			MydbContext context,
+			IUploadedFileStore fileStore,
+			INotificationPublisher notifications,
+			ILogger<InboundStockCiiService> logger)
 		{
 			_context = context;
 			_fileStore = fileStore;
+			_notifications = notifications;
 			_logger = logger;
 		}
 
@@ -256,6 +263,18 @@ WHERE smm.MaterialNumber = {materialNumber}
 				_logger.LogInformation(
 					"Bulk material stock import completed for {UserName}: {RowCount} row(s).",
 					data.UserName, inboundStocks.Count);
+
+				// One summary notification per import, not one per row - a 500-line spreadsheet
+				// should not produce 500 notifications.
+				await _notifications.PublishAsync(
+					data.UserName,
+					NotificationTypes.StockInward,
+					NotificationSeverities.Success,
+					"Bulk CII stock inwarded",
+					$"{inboundStocks.Count} CII item(s) were inwarded against delivery {data.DeliveryNumber}.",
+					referenceType: "CiiInward",
+					referenceId: data.DeliveryNumber,
+					cancellationToken: cancellationToken);
 			}
 			finally
 			{
@@ -291,6 +310,17 @@ WHERE smm.MaterialNumber = {materialNumber}
 				_logger.LogInformation(
 					"Stock import completed for {UserName}: {RowCount} serial number(s).",
 					data.UserName, inboundStocks.Count);
+
+				await _notifications.PublishAsync(
+					data.UserName,
+					NotificationTypes.StockInward,
+					NotificationSeverities.Success,
+					"CII stock inwarded",
+					$"{inboundStocks.Count} serial number(s) of material {data.MaterialNumber} were inwarded against delivery {data.DeliveryNumber}.",
+					materialNumber: data.MaterialNumber,
+					referenceType: "CiiInward",
+					referenceId: data.DeliveryNumber,
+					cancellationToken: cancellationToken);
 			}
 			finally
 			{
@@ -314,6 +344,18 @@ WHERE smm.MaterialNumber = {materialNumber}
 			_logger.LogInformation(
 				"Serial number {SerialNumber} of material {MaterialNumber} inwarded by {UserName}.",
 				data.SerialNumber, data.MaterialNumber, data.UserName);
+
+			await _notifications.PublishAsync(
+				data.UserName,
+				NotificationTypes.StockInward,
+				NotificationSeverities.Success,
+				"CII stock inwarded",
+				$"Serial number {data.SerialNumber} of material {data.MaterialNumber} was inwarded.",
+				materialNumber: data.MaterialNumber,
+				serialNumber: data.SerialNumber,
+				referenceType: "CiiInward",
+				referenceId: data.DeliveryNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		// ------------------------------------------------------------------ Inbound updates
@@ -435,6 +477,19 @@ WHERE smm.MaterialNumber = {materialNumber}
 			_logger.LogWarning(
 				"Hard delete performed for serial {SerialNumber} of material {MaterialNumber}.",
 				serialNumber, materialNumber);
+
+			// Irreversible, so it is worth surfacing to the whole tenant.
+			await _notifications.PublishAsync(
+				null, // route carries no user; the publisher uses the token identity
+				NotificationTypes.StockDeleted,
+				NotificationSeverities.Warning,
+				"Serial number permanently deleted",
+				$"Serial number {serialNumber} of material {materialNumber} was permanently deleted.",
+				materialNumber: materialNumber,
+				serialNumber: serialNumber,
+				referenceType: "CiiSerial",
+				referenceId: serialNumber,
+				cancellationToken: cancellationToken);
 
 			return result;
 		}

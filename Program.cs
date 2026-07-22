@@ -1,6 +1,12 @@
-using System.Text.Json;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using StockManagementWebApi.Common.Auth;
 using StockManagementWebApi.Common.Files;
 using StockManagementWebApi.Common.Models;
 using StockManagementWebApi.Middleware;
@@ -24,6 +30,58 @@ builder.Logging.AddSimpleConsole(options =>
 builder.Logging.AddDebug();
 
 // ---------------------------------------------------------------------------------
+// Authentication
+// ---------------------------------------------------------------------------------
+
+// Validated on first use and at startup, so a missing or too-short signing key fails the
+// deployment instead of silently weakening every token.
+builder.Services
+	.AddOptions<JwtOptions>()
+	.Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+	.ValidateDataAnnotations()
+	.ValidateOnStart();
+
+var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+
+builder.Services
+	.AddAuthentication(options =>
+	{
+		options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+		options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+	})
+	.AddJwtBearer(options =>
+	{
+		options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+		options.SaveToken = false;
+
+		options.TokenValidationParameters = new TokenValidationParameters
+		{
+			ValidateIssuer = true,
+			ValidIssuer = jwtOptions.Issuer,
+
+			ValidateAudience = true,
+			ValidAudience = jwtOptions.Audience,
+
+			ValidateIssuerSigningKey = true,
+			IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
+
+			ValidateLifetime = true,
+			// Default is 5 minutes of grace, which would keep expired tokens working well past
+			// their stated expiry. Zero means "expired" means expired.
+			ClockSkew = TimeSpan.FromSeconds(jwtOptions.ClockSkewSeconds),
+
+			// ClaimTypes.Name is what BaseApiController.CurrentUserName reads.
+			NameClaimType = System.Security.Claims.ClaimTypes.Name,
+			RoleClaimType = System.Security.Claims.ClaimTypes.Role
+		};
+
+		// Auth failures answer with the standard envelope rather than an empty challenge.
+		options.Events = JwtBearerEventHandlers.Create();
+	});
+
+builder.Services.AddAuthorization();
+
+// ---------------------------------------------------------------------------------
 // Services
 // ---------------------------------------------------------------------------------
 builder.Services.AddCors(options =>
@@ -34,10 +92,18 @@ builder.Services.AddCors(options =>
 			policy.AllowAnyOrigin();
 			policy.AllowAnyHeader();
 			policy.AllowAnyMethod();
+			// Without this the browser hides both headers from JavaScript: the client needs
+			// Token-Expired to decide whether to refresh, and X-Correlation-ID for support.
+			policy.WithExposedHeaders(JwtBearerEventHandlers.TokenExpiredHeader, CorrelationIdMiddleware.HeaderName);
 		});
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+	// Every endpoint requires a valid token unless it opts out with [AllowAnonymous].
+	// Only LoginController does.
+	options.Filters.Add(new AuthorizeFilter());
+});
 
 // Model-binding and data-annotation failures must use the same envelope as everything else,
 // instead of the default ValidationProblemDetails body.
@@ -65,14 +131,44 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+	options.SwaggerDoc("v1", new OpenApiInfo { Title = "Stock Management API", Version = "v1" });
+
+	// Lets the Swagger UI "Authorize" button send a bearer token.
+	options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+	{
+		Name = "Authorization",
+		Type = SecuritySchemeType.Http,
+		Scheme = "bearer",
+		BearerFormat = "JWT",
+		In = ParameterLocation.Header,
+		Description = "Paste the access token returned by /api/Login/Login. The 'Bearer ' prefix is added for you."
+	});
+
+	options.AddSecurityRequirement(new OpenApiSecurityRequirement
+	{
+		{
+			new OpenApiSecurityScheme
+			{
+				Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+			},
+			Array.Empty<string>()
+		}
+	});
+});
 
 builder.Services.AddDbContext<MydbContext>(options =>
 	options.UseSqlServer(builder.Configuration.GetConnectionString("MyDBConnection")));
 
 // Application services. Scoped so each one shares the request's DbContext and is disposed
 // with the request scope - no connection outlives the request that opened it.
+// The notification publisher falls back to the token identity when an operation does not
+// name the acting user in its payload.
+builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddSingleton<IUploadedFileStore, UploadedFileStore>();
+builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<ISmCompanyService, SmCompanyService>();
@@ -80,8 +176,16 @@ builder.Services.AddScoped<ISmUserService, SmUserService>();
 builder.Services.AddScoped<IInboundStockCiiService, InboundStockCiiService>();
 builder.Services.AddScoped<IOutboundStockCiiService, OutboundStockCiiService>();
 builder.Services.AddScoped<INonCiiStockService, NonCiiStockService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<INotificationPublisher, NotificationPublisher>();
 
 var app = builder.Build();
+
+// Warn loudly at boot if the refresh-token table is missing, instead of letting the first
+// sign-in fail with an opaque 500.
+await AuthSchemaCheck.VerifyRefreshTokenStoreAsync(
+	app.Services,
+	app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("StockManagementWebApi.Startup"));
 
 // ---------------------------------------------------------------------------------
 // Pipeline
@@ -92,15 +196,12 @@ var app = builder.Build();
 app.UseGlobalExceptionHandling();
 app.UseCorrelationId();
 
-// Responses that never reached a controller (unmatched route, 405, 401/403 from the auth
-// middleware) arrive here with an empty body; give them the standard envelope too.
+// Responses that never reached a controller (unmatched route, 405) arrive here with an empty
+// body; give them the standard envelope too. Authentication failures are already handled by
+// the JWT bearer events, which write the envelope themselves.
 app.UseStatusCodePages(async statusCodeContext =>
 {
 	var context = statusCodeContext.HttpContext;
-	if (context.Response.HasStarted)
-	{
-		return;
-	}
 
 	var statusCode = context.Response.StatusCode;
 	var message = statusCode switch
@@ -115,12 +216,7 @@ app.UseStatusCodePages(async statusCodeContext =>
 		_ => "The request could not be completed."
 	};
 
-	context.Response.ContentType = "application/json; charset=utf-8";
-
-	var payload = ApiResponse.Fail(message, statusCode, context.TraceIdentifier);
-	await context.Response.WriteAsync(
-		JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-		context.RequestAborted);
+	await ApiResponseWriter.WriteErrorAsync(context, statusCode, message);
 });
 
 // Configure the HTTP request pipeline.
@@ -132,6 +228,10 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 app.UseCors();
+
+// Authentication must run before authorization: one establishes who the caller is, the
+// other decides whether they are allowed in.
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

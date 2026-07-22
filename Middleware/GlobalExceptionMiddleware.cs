@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text.Json;
 using StockManagementWebApi.Common.Exceptions;
 using StockManagementWebApi.Common.Models;
 
@@ -13,8 +12,6 @@ namespace StockManagementWebApi.Middleware
 	/// </summary>
 	public class GlobalExceptionMiddleware
 	{
-		private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-
 		private readonly RequestDelegate _next;
 		private readonly ILogger<GlobalExceptionMiddleware> _logger;
 		private readonly IHostEnvironment _environment;
@@ -69,24 +66,22 @@ namespace StockManagementWebApi.Middleware
 				return;
 			}
 
-			context.Response.Clear();
-			context.Response.StatusCode = translated.StatusCode;
-			context.Response.ContentType = "application/json; charset=utf-8";
-
-			var payload = ApiResponse.Fail(translated.Message, translated.StatusCode, correlationId, translated.Errors);
-
-			if (_environment.IsDevelopment())
-			{
-				payload.Developer = new DeveloperDetail
+			var developer = _environment.IsDevelopment()
+				? new DeveloperDetail
 				{
 					ExceptionType = exception.GetType().FullName ?? exception.GetType().Name,
 					ExceptionMessage = exception.Message,
 					InnerExceptionMessage = exception.InnerException?.Message,
 					StackTrace = exception.StackTrace
-				};
-			}
+				}
+				: null;
 
-			await context.Response.WriteAsync(JsonSerializer.Serialize(payload, SerializerOptions), context.RequestAborted);
+			await ApiResponseWriter.WriteErrorAsync(
+				context,
+				translated.StatusCode,
+				translated.Message,
+				translated.Errors,
+				developer);
 		}
 
 		private void Log(HttpContext context, Exception exception, TranslatedException translated, string correlationId)

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using StockManagementWebApi.Common.Exceptions;
 using StockManagementWebApi.Models;
+using StockManagementWebApi.Models.Notifications;
 using StockManagementWebApi.Models.Responses;
 
 namespace StockManagementWebApi.Services
@@ -53,11 +54,16 @@ namespace StockManagementWebApi.Services
 		private static readonly string[] AlreadyProcessedStatuses = { "Outward", "Defective", "Damaged", "BreakFix" };
 
 		private readonly MydbContext _context;
+		private readonly INotificationPublisher _notifications;
 		private readonly ILogger<OutboundStockCiiService> _logger;
 
-		public OutboundStockCiiService(MydbContext context, ILogger<OutboundStockCiiService> logger)
+		public OutboundStockCiiService(
+			MydbContext context,
+			INotificationPublisher notifications,
+			ILogger<OutboundStockCiiService> logger)
 		{
 			_context = context;
+			_notifications = notifications;
 			_logger = logger;
 		}
 
@@ -167,6 +173,18 @@ namespace StockManagementWebApi.Services
 			_logger.LogInformation(
 				"Outward recorded for {SerialCount} serial number(s) of material {MaterialNumber} by {UserName}.",
 				serialList.Count, data.MaterialNumber, data.UserName);
+
+			await _notifications.PublishAsync(
+				data.UserName,
+				NotificationTypes.StockOutward,
+				NotificationSeverities.Info,
+				"CII stock outwarded",
+				$"{serialList.Count} serial number(s) of material {data.MaterialNumber} were outwarded to {data.TargetLocation ?? "the target location"}.",
+				materialNumber: data.MaterialNumber,
+				serialNumber: serialList.Count == 1 ? serialList[0] : null,
+				referenceType: "CiiOutward",
+				referenceId: data.OrderNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		public async Task AddBulkOutboundDataAsync(BulkAddDeliveryData data, CancellationToken cancellationToken = default)
@@ -225,6 +243,16 @@ namespace StockManagementWebApi.Services
 			_logger.LogInformation(
 				"Bulk outward recorded for {SerialCount} serial number(s) by {UserName}.",
 				serialList.Count, data.UserName);
+
+			await _notifications.PublishAsync(
+				data.UserName,
+				NotificationTypes.StockOutward,
+				NotificationSeverities.Info,
+				"Bulk CII stock outwarded",
+				$"{serialList.Count} serial number(s) were outwarded to {data.TargetLocation ?? "the target location"}.",
+				referenceType: "CiiOutward",
+				referenceId: data.OrderNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		public async Task DeleteOutboundDataAsync(string materialNumber, string serialNumber, int outboundStockCiiKey, CancellationToken cancellationToken = default)
@@ -327,6 +355,22 @@ namespace StockManagementWebApi.Services
 			_logger.LogInformation(
 				"Return recorded for material {MaterialNumber}, serial {SerialNumber} as {ReturnType}.",
 				data.MaterialNumber, data.SerialNumber, data.ReturnType);
+
+			// A unit coming back damaged or needing a break-fix is worth flagging, not just noting.
+			var isFaulty = data.ReturnType is not null &&
+				new[] { "Damaged", "BreakFix", "Defective" }.Contains(data.ReturnType, StringComparer.OrdinalIgnoreCase);
+
+			await _notifications.PublishAsync(
+				data.UserName,
+				NotificationTypes.StockReturn,
+				isFaulty ? NotificationSeverities.Warning : NotificationSeverities.Info,
+				isFaulty ? $"Stock returned as {data.ReturnType}" : "CII stock returned",
+				$"Serial number {data.SerialNumber} of material {data.MaterialNumber} was returned from {data.LocationReturnedFrom ?? "an unspecified location"} as {data.ReturnType}.",
+				materialNumber: data.MaterialNumber,
+				serialNumber: data.SerialNumber,
+				referenceType: "CiiReturn",
+				referenceId: data.OrderNumber,
+				cancellationToken: cancellationToken);
 		}
 
 		public async Task UpdateReturnDataAsync(UpdateReturnDataList data, CancellationToken cancellationToken = default)
