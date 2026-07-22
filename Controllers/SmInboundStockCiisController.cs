@@ -50,11 +50,20 @@ namespace StockManagementWebApi.Controllers
         [HttpGet("GetLogmanagementRecord")]
         public async Task<ActionResult> GetLogmanagementRecord()
         {
-            var logRecords = await _context.Log_records.FromSqlRaw("SELECT * FROM Log_record").ToListAsync();
-            return Ok(logRecords);
-            //return await _context.SmInboundStockCiis.ToListAsync();
+            try
+            {
+                var logRecords = await _context.Log_records
+                    .FromSqlRaw("EXEC Sp_GetLogManagementRecords")
+                    .ToListAsync();
+
+                return Ok(logRecords);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"An error occurred while fetching log records: {ex.Message}");
+            }
         }
-		[HttpPost("compare")]
+        [HttpPost("compare")]
 		public async Task<IActionResult> CompareMaterials([FromForm] ExcelCompareRequest data)
 		{
 			if (data.file == null || data.file.Length == 0)
@@ -138,243 +147,313 @@ namespace StockManagementWebApi.Controllers
 
 
 
-		[HttpPost("AddBulkMaterialStock")]
-		public async Task<IActionResult> Importstockdate1(AddStockInward data)
-		{
-			if (data.file == null || data.file.Length == 0)
-				return BadRequest("No file uploaded.");
+        [HttpPost("AddBulkMaterialStock")]
+        public async Task<IActionResult> Importstockdate1(AddStockInward data)
+        {
+            if (data.file == null || data.file.Length == 0)
+                return BadRequest("No file uploaded.");
 
-			var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
+            var userCodes = await _context.Database
+                .SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName)
+                .ToListAsync();
 
-			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
-			if (!Directory.Exists(uploadsDirectory))
-			{
-				Directory.CreateDirectory(uploadsDirectory);
-			}
+            if (userCodes.Count == 0)
+                return BadRequest($"No user found for login '{data.UserName}'.");
 
-			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
-			try
-			{
-				using (var stream = new FileStream(filePath, FileMode.Create))
-				{
-					data.file.CopyTo(stream);
-				}
+            var userCode = userCodes[0];
 
-				var inboundStocks = new List<Dictionary<string, object>>();
-				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-				using (var package = new ExcelPackage(new FileInfo(filePath)))
-				{
-					var worksheet = package.Workbook.Worksheets[0];
-					var rowCount = worksheet.Dimension.Rows;
-					for (int row = 2; row <= rowCount; row++)
-					{
-						if (worksheet.Cells[row, 1].Text != "")
-						{
-							var stock = new Dictionary<string, object>
-					{
-						{ "MaterialNumber", worksheet.Cells[row, 1].Text },
-						{ "MaterialDescription", worksheet.Cells[row, 2].Text },
-						{ "SerialNumber", worksheet.Cells[row, 3].Text },
-						{ "Quantity", int.TryParse(worksheet.Cells[row, 4].Text, out int qty) ? qty : 0 },
-						{ "Status", worksheet.Cells[row, 5].Text }
-					};
-							inboundStocks.Add(stock);
-						}
-					}
-				}
+            var tenentcode = await _context.Database
+                .SqlQuery<string>($"SELECT Fk_TenentCode AS Value FROM [dbo].[sm_Users] WHERE LoginId = {data.UserName}")
+                .FirstOrDefaultAsync();
 
-				if (inboundStocks.Count == 0)
-					return BadRequest("The Excel file contains no data.");
+            if (string.IsNullOrEmpty(tenentcode))
+                return BadRequest($"No tenant found for user '{data.UserName}'.");
 
-				var tenentcode = await _context.Database
-					.SqlQuery<string>($"SELECT Fk_TenentCode AS Value FROM [dbo].[sm_Users] WHERE LoginId = {data.UserName}")
-					.FirstOrDefaultAsync();
+            var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+            if (!Directory.Exists(uploadsDirectory))
+                Directory.CreateDirectory(uploadsDirectory);
 
-				foreach (var stock in inboundStocks)
-				{
-					var isMaterialNumberAvailable = await _context.Database
-						.SqlQuery<int>($@"
-SELECT 1 AS Value
-FROM [dbo].[sm_material_master] smm
-INNER JOIN [dbo].[sm_Users] su ON su.Pk_UserCode = smm.Fk_UserCode
-WHERE smm.MaterialNumber = {stock["MaterialNumber"]}
-  AND su.Fk_TenentCode = {tenentcode}")
-						.AnyAsync();
+            // Use a unique filename so concurrent uploads never collide/overwrite each other
+            var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(data.file.FileName)}";
+            var filePath = Path.Combine(uploadsDirectory, uniqueFileName);
 
-					if (!isMaterialNumberAvailable)
-					{
-						await _context.Database.ExecuteSqlRawAsync(
-							@"EXEC AddMaterialNumberNew @p0, @p1, @p2",
-							data.UserName, stock["MaterialNumber"], stock["MaterialDescription"]);
-					}
+            var rowResults = new List<StockImportRowResult>();
 
-					await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14",
-						data.UserName, data.DeliveryNumber, data.OrderNumber, stock["MaterialNumber"],
-						stock["MaterialDescription"], stock["SerialNumber"],
-						stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation, data.PoNumber, data.Location);
-				}
-
-				return Ok("Data imported successfully.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
-			finally
-			{
-				if (System.IO.File.Exists(filePath))
-					System.IO.File.Delete(filePath);
-			}
-		}
-
-		[HttpPost("import")]
-		public async Task<IActionResult> ImportStockData( AddStockInward data)
-		{
-
-			if (data.file == null || data.file.Length == 0)
-				return BadRequest("No file uploaded.");
-			var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
-
-
-			// Define the uploads directory
-			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
-
-			// Create the directory if it doesn't exist
-			if (!Directory.Exists(uploadsDirectory))
-			{
-				Directory.CreateDirectory(uploadsDirectory);
-			}
-
-			// Full file path
-			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
-
-			try
-			{
-				// Save the uploaded file
-				using (var stream = new FileStream(filePath, FileMode.Create))
-				{
-					await data.file.CopyToAsync(stream);
-				}
-
-				// Read data from Excel
-				var inboundStocks = new List<Dictionary<string, object>>();
-				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-				using (var package = new ExcelPackage(new FileInfo(filePath)))
-				{
-					var worksheet = package.Workbook.Worksheets[0]; // Assuming data is in the first sheet
-					var rowCount = worksheet.Dimension.Rows;
-
-					for (int row = 2; row <= rowCount; row++) // Assuming first row is the header
-					{
-						if (worksheet.Cells[row, 1].Text !="")
-						{
-							var stock = new Dictionary<string, object>
-					{
-
-							{ "SerialNumber", worksheet.Cells[row, 1].Text },
-							{ "Quantity", int.TryParse(worksheet.Cells[row, 2].Text, out int qty) ? qty : 0 },
-							{ "Status", worksheet.Cells[row, 3].Text }
-							//{ "DeliveryNumber", worksheet.Cells[row, 4].Text },
-							//{ "DeliveryNumber", worksheet.Cells[row, 1].Text },																																																																																																																					
-							//{ "OrderNumber", worksheet.Cells[row, 2].Text },
-							//{ "MaterialNumber", worksheet.Cells[row, 3].Text },
-							//{ "MaterialDescription", worksheet.Cells[row, 3].Text },
-							//{ "SerialNumber", worksheet.Cells[row, 4].Text },
-							//{ "Quantity", int.TryParse(worksheet.Cells[row, 5].Text, out int qty) ? qty : 0 },
-							//{ "InwardDate", DateTime.TryParse(worksheet.Cells[row, 6].Text, out DateTime rcvDate) ? rcvDate : (DateTime?)null },
-							//{ "SourceLocation", worksheet.Cells[row, 8].Text },
-							//{ "ReceivedBy", worksheet.Cells[row, 9].Text },
-							//{ "Status", worksheet.Cells[row, 10].Text },
-							//{ "RackLocation", worksheet.Cells[row, 11].Text },
-						};
-							inboundStocks.Add(stock);
-						}
-					}
-				}
-
-				if (inboundStocks.Count == 0)
-					return BadRequest("The Excel file contains no data.");
-
-				// Insert data into the database
-				//var connectionString = _configuration.GetConnectionString("MyDBConnection");
-				//using (var connection = new SqlConnection(connectionString))
-				//{
-				//	await connection.OpenAsync();
-
-				foreach (var stock in inboundStocks)
-				{
-                    await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14",data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, 
-						data.MaterialDescription, stock["SerialNumber"],
-				stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation, data.PoNumber, data.Location);
-
-                    //var query = @"
-                    //                  INSERT INTO sm_Inbound_StockCII (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription,SerialNumber,Quantity,InwardDate,SourceLocation,ReceivedBy,Status,RackLocation,Fk_UserCode)
-                    //                  VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription,@SerialNumber,@Quantity,@InwardDate,@SourceLocation,@ReceivedBy,@Status,@RackLocation,@UserCodes);";
-
-                    //using (var command = new SqlCommand(query, connection))
-                    //{
-                    //	//command.Parameters.AddWithValue("@DeliveryNumber", stock["DeliveryNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@OrderNumber", stock["OrderNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@MaterialNumber", stock["MaterialNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@MaterialDescription", stock["MaterialDescription"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@InwardDate", stock["InwardDate"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@SourceLocation", stock["SourceLocation"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@ReceivedBy", stock["ReceivedBy"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@RackLocation", stock["RackLocation"] ?? DBNull.Value);
-                    //	command.Parameters.Add(new SqlParameter("@DeliveryNumber", SqlDbType.NVarChar)
-                    //	{
-                    //		Value = (object?)data.DeliveryNumber ?? DBNull.Value
-                    //	});
-
-                    //	command.Parameters.Add(new SqlParameter("@OrderNumber", SqlDbType.NVarChar)
-                    //	{
-                    //		Value = (object?)data.OrderNumber ?? DBNull.Value
-                    //	});
-                    //	command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
-                    //	command.Parameters.AddWithValue("@MaterialDescription",data.MaterialDescription);
-                    //	command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
-                    //	command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
-                    //	command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
-
-                    //	command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
-                    //	command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
-                    //	command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-                    //	command.Parameters.AddWithValue("@UserCodes", userCodes[0]);
-                    //	command.Parameters.Add(new SqlParameter("@RackLocation", SqlDbType.NVarChar)
-                    //	{
-                    //		Value = (object?)data.RacKLocation ?? DBNull.Value
-                    //	});
-
-
-                    //	await command.ExecuteNonQueryAsync();
-                    //}
+            try
+            {
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await data.file.CopyToAsync(stream);
                 }
-				//}
 
-				return Ok("Data imported successfully.");
-			}
-			catch (SqlException sqlEx)
-			{
-				return StatusCode(400, "Duplicate entry: The Serial number already exists.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
-			finally
-			{
-				// Cleanup the uploaded file
-				if (System.IO.File.Exists(filePath))
-					System.IO.File.Delete(filePath);
-			}
-		}
+                var inboundStocks = new List<(int RowNumber, Dictionary<string, object> Data)>();
+                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+                using (var package = new ExcelPackage(new FileInfo(filePath)))
+                {
+                    if (package.Workbook.Worksheets.Count == 0)
+                        return BadRequest("The Excel file has no worksheets.");
+
+                    var worksheet = package.Workbook.Worksheets[0];
+                    var rowCount = worksheet.Dimension?.Rows ?? 0;
+
+                    for (int row = 2; row <= rowCount; row++)
+                    {
+                        if (worksheet.Cells[row, 1].Text != "")
+                        {
+                            var stock = new Dictionary<string, object>
+                    {
+                        { "MaterialNumber", worksheet.Cells[row, 1].Text },
+                        { "MaterialDescription", worksheet.Cells[row, 2].Text },
+                        { "SerialNumber", worksheet.Cells[row, 3].Text },
+                        { "Quantity", int.TryParse(worksheet.Cells[row, 4].Text, out int qty) ? qty : 0 },
+                        { "Status", worksheet.Cells[row, 5].Text }
+                    };
+                            inboundStocks.Add((row, stock));
+                        }
+                    }
+                }
+
+                if (inboundStocks.Count == 0)
+                    return BadRequest("The Excel file contains no data.");
+
+                foreach (var (rowNumber, stock) in inboundStocks)
+                {
+                    var materialNumber = stock["MaterialNumber"]?.ToString() ?? "";
+                    var serialNumber = stock["SerialNumber"]?.ToString() ?? "";
+
+                    try
+                    {
+                        // Basic per-row validation so bad rows fail fast with a clear reason
+                        if (string.IsNullOrWhiteSpace(materialNumber))
+                            throw new InvalidOperationException("Material Number is missing.");
+
+                        var isMaterialNumberAvailable = await _context.Database
+                            .SqlQuery<int>($@"
+                        SELECT 1 AS Value
+                        FROM [dbo].[sm_material_master] smm
+                        INNER JOIN [dbo].[sm_Users] su ON su.Pk_UserCode = smm.Fk_UserCode
+                        WHERE smm.MaterialNumber = {materialNumber}
+                          AND su.Fk_TenentCode = {tenentcode}")
+                            .AnyAsync();
+
+                        if (!isMaterialNumberAvailable)
+                        {
+                            await _context.Database.ExecuteSqlRawAsync(
+                                @"EXEC AddMaterialNumberNew @p0, @p1, @p2",
+                                data.UserName, materialNumber, stock["MaterialDescription"]);
+                        }
+
+                        await _context.Database.ExecuteSqlRawAsync(
+                            @"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14",
+                            data.UserName, data.DeliveryNumber, data.OrderNumber, materialNumber,
+                            stock["MaterialDescription"], serialNumber,
+                            stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy,
+                            stock["Status"], userCode, data.RacKLocation, data.PoNumber, data.Location);
+
+                        rowResults.Add(new StockImportRowResult
+                        {
+                            RowNumber = rowNumber,
+                            MaterialNumber = materialNumber,
+                            SerialNumber = serialNumber,
+                            Success = true,
+                            Message = "Imported successfully."
+                        });
+                    }
+                    catch (Exception rowEx)
+                    {
+                        // Row-level failure: record it and keep processing the rest of the file
+                        rowResults.Add(new StockImportRowResult
+                        {
+                            RowNumber = rowNumber,
+                            MaterialNumber = materialNumber,
+                            SerialNumber = serialNumber,
+                            Success = false,
+                            Message = rowEx.Message
+                        });
+                    }
+                }
+
+                var successCount = rowResults.Count(r => r.Success);
+                var failCount = rowResults.Count(r => !r.Success);
+
+                return Ok(new
+                {
+                    TotalRows = rowResults.Count,
+                    SuccessCount = successCount,
+                    FailCount = failCount,
+                    Results = rowResults
+                });
+            }
+            catch (Exception ex)
+            {
+                // This only catches file-level failures (bad file, can't open workbook, etc.)
+                return StatusCode(500, $"An error occurred while processing the file: {ex.Message}");
+            }
+            finally
+            {
+                if (System.IO.File.Exists(filePath))
+                    System.IO.File.Delete(filePath);
+            }
+        }
+
+        [HttpPost("import")]
+        public async Task<IActionResult> ImportStockData(AddStockInward data)
+        {
+            if (data.file == null || data.file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            var userCodes = await _context.Database
+                .SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName)
+                .ToListAsync();
+
+            if (userCodes.Count == 0)
+                return BadRequest($"No user found for login '{data.UserName}'.");
+
+            var userCode = userCodes[0];
+
+            var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+            if (!Directory.Exists(uploadsDirectory))
+                Directory.CreateDirectory(uploadsDirectory);
+
+            // Unique filename avoids concurrent uploads overwriting each other's file on disk
+            var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(data.file.FileName)}";
+            var filePath = Path.Combine(uploadsDirectory, uniqueFileName);
+
+            var rowResults = new List<StockImportRowResult>();
+
+            try
+            {
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await data.file.CopyToAsync(stream);
+                }
+
+                var inboundStocks = new List<(int RowNumber, Dictionary<string, object> Data)>();
+                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+                using (var package = new ExcelPackage(new FileInfo(filePath)))
+                {
+                    if (package.Workbook.Worksheets.Count == 0)
+                        return BadRequest("The Excel file has no worksheets.");
+
+                    var worksheet = package.Workbook.Worksheets[0];
+                    var rowCount = worksheet.Dimension?.Rows ?? 0;
+
+                    for (int row = 2; row <= rowCount; row++)
+                    {
+                        if (worksheet.Cells[row, 1].Text != "")
+                        {
+                            var stock = new Dictionary<string, object>
+                    {
+                        { "SerialNumber", worksheet.Cells[row, 1].Text },
+                        { "Quantity", int.TryParse(worksheet.Cells[row, 2].Text, out int qty) ? qty : 0 },
+                        { "Status", worksheet.Cells[row, 3].Text }
+                    };
+                            inboundStocks.Add((row, stock));
+                        }
+                    }
+                }
+
+                if (inboundStocks.Count == 0)
+                    return BadRequest("The Excel file contains no data.");
+
+                foreach (var (rowNumber, stock) in inboundStocks)
+                {
+                    var serialNumber = stock["SerialNumber"]?.ToString() ?? "";
+
+                    try
+                    {
+                        if (string.IsNullOrWhiteSpace(serialNumber))
+                            throw new InvalidOperationException("Serial Number is missing.");
+
+                        await _context.Database.ExecuteSqlRawAsync(
+                            @"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14",
+                            data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
+                            data.MaterialDescription, serialNumber,
+                            stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy,
+                            stock["Status"], userCode, data.RacKLocation, data.PoNumber, data.Location);
+
+                        rowResults.Add(new StockImportRowResult
+                        {
+                            RowNumber = rowNumber,
+                            MaterialNumber = data.MaterialNumber,
+                            SerialNumber = serialNumber,
+                            Success = true,
+                            Message = "Imported successfully."
+                        });
+                    }
+                    catch (SqlException sqlEx)
+                    {
+                        rowResults.Add(new StockImportRowResult
+                        {
+                            RowNumber = rowNumber,
+                            MaterialNumber = data.MaterialNumber,
+                            SerialNumber = serialNumber,
+                            Success = false,
+                            Message = GetFriendlySqlMessage(sqlEx)
+                        });
+                    }
+                    catch (Exception rowEx)
+                    {
+                        rowResults.Add(new StockImportRowResult
+                        {
+                            RowNumber = rowNumber,
+                            MaterialNumber = data.MaterialNumber,
+                            SerialNumber = serialNumber,
+                            Success = false,
+                            Message = rowEx.Message
+                        });
+                    }
+                }
+
+                var successCount = rowResults.Count(r => r.Success);
+                var failCount = rowResults.Count(r => !r.Success);
+
+                return Ok(new
+                {
+                    TotalRows = rowResults.Count,
+                    SuccessCount = successCount,
+                    FailCount = failCount,
+                    Results = rowResults
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"An error occurred while processing the file: {ex.Message}");
+            }
+            finally
+            {
+                if (System.IO.File.Exists(filePath))
+                    System.IO.File.Delete(filePath);
+            }
+        }
+
+        // Translates raw SQL errors into user-friendly messages.
+        // SQL error 2627 = PK/unique constraint violation, 2601 = duplicate key on unique index.
+        private static string GetFriendlySqlMessage(SqlException sqlEx)
+        {
+            if (sqlEx.Number == 2627 || sqlEx.Number == 2601)
+            {
+                if (sqlEx.Message.Contains("UQ_SerialNumber", StringComparison.OrdinalIgnoreCase)
+                    || sqlEx.Message.Contains("Serial", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Serial Number already exists.";
+                }
+                return "Duplicate entry — this record already exists.";
+            }
+
+            if (sqlEx.Number == 547) // foreign key violation
+                return "This record references data that doesn't exist (invalid reference).";
+
+            if (sqlEx.Number == 8152) // string/binary data truncation
+                return "One of the values is too long for its field.";
+
+            return "Import failed for this row due to a database error.";
+        }
 
 
-		[HttpPost("ImportSingleStockData")]
+        [HttpPost("ImportSingleStockData")]
 		public async Task<IActionResult> ImportSingleStockDataF([FromBody] AddSingleStockInward data)
 		{
 			if (data == null)
