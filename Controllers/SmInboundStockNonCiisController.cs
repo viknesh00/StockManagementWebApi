@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using OfficeOpenXml;
 using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.NonStockCII;
@@ -10,10 +13,14 @@ namespace StockManagementWebApi.Controllers
 	public class SmInboundStockNonCiisController : BaseApiController
 	{
 		private readonly INonCiiStockService _nonCiiStockService;
+		private readonly IWebHostEnvironment _environment;
+		private readonly MydbContext _context;
 
-		public SmInboundStockNonCiisController(INonCiiStockService nonCiiStockService)
+		public SmInboundStockNonCiisController(INonCiiStockService nonCiiStockService, IWebHostEnvironment environment, MydbContext context)
 		{
 			_nonCiiStockService = nonCiiStockService;
+			_environment = environment;
+			_context = context;
 		}
 
 		// ------------------------------------------------------------------ Listings
@@ -46,14 +53,162 @@ namespace StockManagementWebApi.Controllers
 		}
 
 		[HttpPost("BulkImportNonCII")]
-		public async Task<IActionResult> BulkImportNonCII([FromForm] AddNonCIIStockInward data, CancellationToken cancellationToken)
+		public async Task<IActionResult> BulkImportNonCII([FromForm] AddNonCIIStockInward data)
 		{
-			await _nonCiiStockService.BulkImportAsync(data, cancellationToken);
+			if (data.file == null || data.file.Length == 0)
+				return BadRequest("No file uploaded.");
 
-			return Success(message: "Bulk upload completed successfully.");
+			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
+			if (!Directory.Exists(uploadsDirectory))
+				Directory.CreateDirectory(uploadsDirectory);
+
+			var filePath = Path.Combine(uploadsDirectory, Guid.NewGuid() + Path.GetExtension(data.file.FileName));
+
+			var rowResults = new List<StockImportRowResult>();
+
+			try
+			{
+				using (var stream = new FileStream(filePath, FileMode.Create))
+				{
+					await data.file.CopyToAsync(stream);
+				}
+
+				ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
+				using var package = new ExcelPackage(new FileInfo(filePath));
+				var worksheet = package.Workbook.Worksheets[0];
+				if (worksheet.Dimension == null)
+					return BadRequest("Excel file is empty.");
+
+				int rowCount = worksheet.Dimension.Rows;
+
+				// Get tenant code
+				var tenentcode = await _context.Database
+					.SqlQuery<string>($"SELECT Fk_TenentCode AS Value FROM [dbo].[sm_Users] WHERE LoginId = {data.UserName}")
+					.FirstOrDefaultAsync();
+
+				if (string.IsNullOrEmpty(tenentcode))
+					return BadRequest($"No tenant found for user '{data.UserName}'.");
+
+				for (int row = 2; row <= rowCount; row++)
+				{
+					var materialNumber = worksheet.Cells[row, 1].Text.Trim();
+					if (string.IsNullOrWhiteSpace(materialNumber))
+						continue;
+
+					var materialDescription = worksheet.Cells[row, 2].Text.Trim();
+
+					try
+					{
+						// Check if material number exists for this tenant
+						var isMaterialNumberAvailable = await _context.Database
+							.SqlQuery<int>($@"
+                        SELECT 1 AS Value
+                        FROM [dbo].[sm_material_master] smm
+                        INNER JOIN [dbo].[sm_Users] su ON su.Pk_UserCode = smm.Fk_UserCode
+                        WHERE smm.MaterialNumber = {materialNumber}
+                          AND su.Fk_TenentCode = {tenentcode}")
+							.AnyAsync();
+
+						if (!isMaterialNumberAvailable)
+						{
+							await _context.Database.ExecuteSqlRawAsync(
+								@"EXEC AddNonStockCII_MaterialNumber @p0, @p1, @p2",
+								data.UserName, materialNumber, materialDescription);
+						}
+
+						int quantity = 0;
+						int.TryParse(worksheet.Cells[row, 3].Text, out quantity);
+						var status = worksheet.Cells[row, 4].Text.Trim();
+
+						await _context.Database.ExecuteSqlRawAsync(
+							@"exec Sp_AddInboundStock_NonCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12",
+							data.DeliveryNumber, data.OrderNumber, materialNumber,
+							materialDescription, data.InwardDate, data.InwardFrom, data.ReceivedBy,
+							data.RackLocation, quantity, data.UserName, data.PoNumber, data.Location, status);
+
+						rowResults.Add(new StockImportRowResult
+						{
+							RowNumber = row,
+							MaterialNumber = materialNumber,
+							SerialNumber = "", // Non-CII stock has no serial number per row
+							Success = true,
+							Message = "Imported successfully."
+						});
+					}
+					catch (SqlException sqlEx)
+					{
+						rowResults.Add(new StockImportRowResult
+						{
+							RowNumber = row,
+							MaterialNumber = materialNumber,
+							SerialNumber = "",
+							Success = false,
+							Message = GetFriendlySqlMessage(sqlEx)
+						});
+					}
+					catch (Exception rowEx)
+					{
+						rowResults.Add(new StockImportRowResult
+						{
+							RowNumber = row,
+							MaterialNumber = materialNumber,
+							SerialNumber = "",
+							Success = false,
+							Message = rowEx.Message
+						});
+					}
+				}
+
+				if (rowResults.Count == 0)
+					return BadRequest("The Excel file contains no data.");
+
+				var successCount = rowResults.Count(r => r.Success);
+				var failCount = rowResults.Count(r => !r.Success);
+
+				return Ok(new
+				{
+					TotalRows = rowResults.Count,
+					SuccessCount = successCount,
+					FailCount = failCount,
+					Results = rowResults
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new
+				{
+					Success = false,
+					Message = ex.Message
+				});
+			}
+			finally
+			{
+				if (System.IO.File.Exists(filePath))
+					System.IO.File.Delete(filePath);
+			}
 		}
 
-		// ------------------------------------------------------------------ Material master
+		// Reuse GetFriendlySqlMessage / StockImportRowResult if already declared elsewhere in this controller class.
+		// Translates raw SQL errors into user-friendly messages.
+		// SQL error 2627 = PK/unique constraint violation, 2601 = duplicate key on unique index.
+		private static string GetFriendlySqlMessage(SqlException sqlEx)
+		{
+			if (sqlEx.Number == 2627 || sqlEx.Number == 2601)
+			{
+				if (sqlEx.Message.Contains("MaterialNumber", StringComparison.OrdinalIgnoreCase)
+					|| sqlEx.Message.Contains("Material", StringComparison.OrdinalIgnoreCase))
+				{
+					return "Material Number already exists.";
+				}
+				return "Duplicate entry — this record already exists.";
+			}
+			if (sqlEx.Number == 547) // foreign key violation
+				return "This record references data that doesn't exist (invalid reference).";
+			if (sqlEx.Number == 8152) // string/binary data truncation
+				return "One of the values is too long for its field.";
+			return "Import failed for this row due to a database error.";
+		}
+
 
 		[HttpPost("NonStockCIIMaterial")]
 		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data, CancellationToken cancellationToken)
