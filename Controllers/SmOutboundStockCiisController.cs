@@ -1,594 +1,167 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models;
+using StockManagementWebApi.Services;
 
 namespace StockManagementWebApi.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class SmOutboundStockCiisController : ControllerBase
-    {
-        private readonly MydbContext _context;
+	[Route("api/[controller]")]
+	public class SmOutboundStockCiisController : BaseApiController
+	{
+		private readonly IOutboundStockCiiService _outboundStockService;
 
-        public SmOutboundStockCiisController(MydbContext context)
-        {
-            _context = context;
-        }
+		public SmOutboundStockCiisController(IOutboundStockCiiService outboundStockService)
+		{
+			_outboundStockService = outboundStockService;
+		}
 
-        // GET: api/SmOutboundStockCiis
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<SmOutboundStockCii>>> GetSmOutboundStockCiis()
-        {
-            return await _context.SmOutboundStockCiis.ToListAsync();
-        }
+		// GET: api/SmOutboundStockCiis
+		[HttpGet]
+		public async Task<IActionResult> GetSmOutboundStockCiis(CancellationToken cancellationToken)
+		{
+			var stock = await _outboundStockService.GetAllAsync(cancellationToken);
+
+			return Success(stock, "Outbound CII stock retrieved successfully.");
+		}
 
 		[HttpPost("CollectionPointUpdate")]
-		public async Task<ActionResult> CollectionPointUpdate([FromBody] CollectionPointDetail data)
+		public async Task<IActionResult> CollectionPointUpdate([FromBody] CollectionPointDetail data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				var sql = @"EXEC UpdateCollectionPointDetails 
-				   @username = {0},
-		           @MaterialNumber = {1}, 
-		           @SerialNumber = {2}, 
-		           @CollectionPointStatus = {3}, 
-		           @CollectionPointDate = {4}, 
-		           @CollectionPointerName = {5},
-                   @RackLocation={6}";
+			await _outboundStockService.UpdateCollectionPointAsync(data, cancellationToken);
 
-				await _context.Database.ExecuteSqlRawAsync(sql,
-
-					data.UserName,
-					data.MaterialNumber,
-					data.SerialNumber,
-					data.CollectionPointStatus,
-					data.CollectionPointDate,
-					data.CollectionPointerName,
-					data.RackLocation);
-
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Updated(message: "Collection point updated successfully.");
 		}
 
 		[HttpPost("{MaterialNumber}/{SerialNumber}/{OrderNumber}")]
-		public async Task<ActionResult> outboundstockList(string MaterialNumber, string SerialNumber, string OrderNumber)
+		public async Task<IActionResult> outboundstockList(string MaterialNumber, string SerialNumber, string OrderNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
-                var CIIdata = _context.InboundCIILists.FromSqlRaw(@"exec sp_inboundstockList @p0, @p1, @p2", MaterialNumber, SerialNumber, OrderNumber).ToList();
-				var Deliverydata = _context.OutboundDataLists.FromSqlRaw(@"exec sp_outboundstockList @p0, @p1", MaterialNumber, SerialNumber).ToList();
-				var Inbounddata = _context.ReturnStockDatas.FromSqlRaw(@"exec deliverystockCII @p0,@p1", MaterialNumber, SerialNumber).ToList();
-				var Stagingdata = _context.StagingStockDatas.FromSqlRaw(@"exec stagingstockCII @p0,@p1", MaterialNumber, SerialNumber).ToList();
+			var result = await _outboundStockService.GetStockLookupAsync(MaterialNumber, SerialNumber, OrderNumber, cancellationToken);
 
-				return Ok(
-                    new
-                    {
-						CIIData= CIIdata,
-						InboundData = Inbounddata,
-						DeliveryData= Deliverydata,
-						StagingData= Stagingdata
-					});
-
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(result, "Stock details retrieved successfully.");
 		}
+
+		// ------------------------------------------------------------------ Outward
+
 		[HttpPost("AddOutboundData")]
-		public async Task<ActionResult> AddOutboundData([FromBody] AddDeliveryData data)
+		public async Task<IActionResult> AddOutboundData([FromBody] AddDeliveryData data, CancellationToken cancellationToken)
 		{
-			if (data == null || data.SerialNumber == null || data.SerialNumber.Count == 0)
-				return BadRequest("At least one SerialNumber is required.");
+			await _outboundStockService.AddOutboundDataAsync(data, cancellationToken);
 
-			try
-			{
-				var serialList = data.SerialNumber;
-				var deliveryList = data.Fk_Inbound_StockCII_DeliveryNumber;
-
-				// ✅ Validate array length match
-				if (deliveryList != null && serialList.Count != deliveryList.Count)
-				{
-					return BadRequest("SerialNumber and DeliveryNumber count mismatch.");
-				}
-
-				for (int i = 0; i < serialList.Count; i++)
-				{
-					var serial = serialList[i];
-					var deliveryNumber = deliveryList != null ? deliveryList[i] : data.DeliveryNumber;
-
-					var status = await _context.Database
-						.SqlQueryRaw<string>(
-							"SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
-							serial, data.MaterialNumber)
-						.ToListAsync();
-
-					if (status.Count > 0 &&
-						new[] { "Outward", "Defective", "Damaged", "BreakFix" }
-						.Contains(status[0], StringComparer.OrdinalIgnoreCase))
-					{
-						return StatusCode(400, $"Serial {serial} already processed.");
-					}
-
-					await _context.Database.ExecuteSqlRawAsync(
-						"EXEC AddInboundStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10",
-						data.UserName,
-						data.DeliveryNumber,
-						data.MaterialNumber,
-						serial,
-						data.MaterialDescription,
-						data.OrderNumber,
-						data.OutBounddate,
-						data.TargetLocation,
-						data.SentBy,
-						deliveryNumber, // ✅ mapped per serial
-						data.ReceiverName
-					);
-
-					await _context.Database.ExecuteSqlRawAsync(
-						"UPDATE sm_Inbound_StockCII SET Status = 'Outward' WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
-						serial, data.MaterialNumber
-					);
-				}
-
-				return Ok("Outward data added successfully.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, ex.Message);
-			}
+			return Success(message: "Outward data added successfully.");
 		}
 
 		[HttpPost("BulkOutwardData")]
-		public async Task<ActionResult> BulkOutwardData([FromBody] BulkAddDeliveryData data)
+		public async Task<IActionResult> BulkOutwardData([FromBody] BulkAddDeliveryData data, CancellationToken cancellationToken)
 		{
-			if (data == null || data.SerialNumber == null || data.SerialNumber.Count == 0)
-				return BadRequest("At least one SerialNumber is required.");
+			await _outboundStockService.AddBulkOutboundDataAsync(data, cancellationToken);
 
-			try
-			{
-				var serialList = data.SerialNumber;
-				var deliveryList = data.Fk_Inbound_StockCII_DeliveryNumber;
-				var materialNumberList = data.MaterialNumber;
-				var materialDescriptionList = data.MaterialDescription;
-
-				// Validate list count
-				if (materialNumberList == null || materialNumberList.Count != serialList.Count)
-				{
-					return BadRequest("MaterialNumber and SerialNumber count mismatch.");
-				}
-
-				if (materialDescriptionList == null || materialDescriptionList.Count != serialList.Count)
-				{
-					return BadRequest("MaterialDescription and SerialNumber count mismatch.");
-				}
-
-				if (deliveryList != null && deliveryList.Count != serialList.Count)
-				{
-					return BadRequest("SerialNumber and DeliveryNumber count mismatch.");
-				}
-
-				for (int i = 0; i < serialList.Count; i++)
-				{
-					var serial = serialList[i];
-					var materialNumber = materialNumberList[i];
-					var materialDescription = materialDescriptionList[i];
-					var deliveryNumber = deliveryList != null
-						? deliveryList[i]
-						: data.DeliveryNumber;
-
-					var status = await _context.Database
-						.SqlQueryRaw<string>(
-							"SELECT Status FROM sm_Inbound_StockCII WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
-							serial,
-							materialNumber)
-						.ToListAsync();
-
-					if (status.Count > 0 &&
-						new[] { "Outward", "Defective", "Damaged", "BreakFix" }
-						.Contains(status[0], StringComparer.OrdinalIgnoreCase))
-					{
-						return BadRequest($"Serial {serial} already processed.");
-					}
-
-					// Insert into Outbound table
-					await _context.Database.ExecuteSqlRawAsync(
-						@"EXEC BulkAddInboundStockCII
-                    @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12",
-						data.UserName,
-						data.DeliveryNumber,
-						materialNumber,
-						serial,
-						materialDescription,
-						data.OrderNumber,
-						data.OutBounddate,
-						data.TargetLocation,
-						data.SentBy,
-						deliveryNumber,
-						data.ReceiverName,
-						data.Status,
-						data.SubStatus
-					);
-
-					// Existing logic - unchanged
-					await _context.Database.ExecuteSqlRawAsync(
-						"UPDATE sm_Inbound_StockCII SET Status = 'Outward' WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
-						serial,
-						materialNumber
-					);
-				}
-
-				return Ok("Outward data added successfully.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, ex.Message);
-			}
+			return Success(message: "Outward data added successfully.");
 		}
 
 		[HttpPost("DeleteOutboundData/{MaterialNumber}/{SerialNumber}/{OutBoundStockCIIKey}")]
-        public async Task<IActionResult> DeleteOutboundData( string MaterialNumber,string SerialNumber,int OutBoundStockCIIKey)
-        {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var deletedRows = await _context.Database.ExecuteSqlRawAsync(
-                    @"DELETE FROM sm_Outbound_StockCII 
-              WHERE serialNumber = @p0 
-              AND materialNumber = @p1 
-              AND OutBoundStockCIIKey = @p2",
-                    SerialNumber,
-                    MaterialNumber,
-                    OutBoundStockCIIKey);
-
-                if (deletedRows == 0)
-                {
-                    return NotFound("No outbound data found to delete.");
-                }
-
-                await _context.Database.ExecuteSqlRawAsync(
-                    @"UPDATE sm_Inbound_StockCII 
-              SET Status = 'New' 
-              WHERE serialNumber = @p0 
-              AND materialNumber = @p1",
-                    SerialNumber,
-                    MaterialNumber);
-
-                await transaction.CommitAsync();
-
-                return Ok("Outbound data deleted successfully.");
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                // Log ex here
-
-                return StatusCode(500, "An error occurred while deleting outbound data.");
-            }
-        }
-
-
-
-        [HttpPost("UpdatedeliveryData")]
-		public async Task<ActionResult> UpdatedeliveryData([FromBody] UpdatedeliveryDataList data)
+		public async Task<IActionResult> DeleteOutboundData(string MaterialNumber, string SerialNumber, int OutBoundStockCIIKey, CancellationToken cancellationToken)
 		{
-             
-			try
-			{
-				
-				await _context.Database.ExecuteSqlRawAsync(@"exec updatedeliverydata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
-				  data.UserName,data.MaterialNumber, data.SerialNumber, data.OrderNumber,data.ExistOrderNumber,
-				   data.Outbounddate, data.TargetLocation, data.SentBy,data.ReceiverName);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _outboundStockService.DeleteOutboundDataAsync(MaterialNumber, SerialNumber, OutBoundStockCIIKey, cancellationToken);
+
+			return Deleted(message: "Outbound data deleted successfully.");
 		}
-		[HttpPost("AddReturnData")]
-		public async Task<ActionResult> AddReturnData([FromBody] AddReturnDataList data)
+
+		[HttpPost("UpdatedeliveryData")]
+		public async Task<IActionResult> UpdatedeliveryData([FromBody] UpdatedeliveryDataList data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				// Fetch the status of the serial number
-				var status = await _context
-		.Database
-		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1",
-			data.SerialNumber, data.MaterialNumber)
-		.ToListAsync();
+			await _outboundStockService.UpdateDeliveryDataAsync(data, cancellationToken);
 
-				// Validate if the status exists and is "Delivered"
-				if (string.IsNullOrEmpty(status[0]))
-				{
-					return NotFound("Serial number or material number not found.");
-				}
+			return Updated(message: "Delivery data updated successfully.");
+		}
 
-				if (!string.Equals(status[0], "Outward", StringComparison.OrdinalIgnoreCase))
-				{
-					return BadRequest("The serial number status should be 'Outward' before returning.");
-				}
+		// ------------------------------------------------------------------ Returns
 
-				// Execute the stored procedure
-				await _context.Database.ExecuteSqlRawAsync(
-					"EXEC AddReturnStockCII @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10,@p11",
-					data.UserName,data.DeliveryNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,
-					data.OrderNumber, data.LocationReturnedFrom, data.Returneddate, data.ReturnedBy,
-					data.RackLocation, data.ReturnType, data.Returns);
+		[HttpPost("AddReturnData")]
+		public async Task<IActionResult> AddReturnData([FromBody] AddReturnDataList data, CancellationToken cancellationToken)
+		{
+			await _outboundStockService.AddReturnDataAsync(data, cancellationToken);
 
-				// Update the stock status
-				await _context.Database.ExecuteSqlRawAsync(
-					"UPDATE sm_Inbound_StockCII SET Status = @p0 WHERE SerialNumber = @p1 AND MaterialNumber = @p2",
-					data.ReturnType, data.SerialNumber, data.MaterialNumber);
-
-				return Ok("Return data added successfully.");
-			}
-			catch (Exception ex)
-			{
-				// Log the exception (use a logging framework like Serilog, NLog, etc.)
-				Console.WriteLine($"Error: {ex.Message}");
-
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(message: "Return data added successfully.");
 		}
 
 		[HttpPost("UpdateReturnData")]
-		public async Task<ActionResult> UpdateReturnData([FromBody] UpdateReturnDataList data)
-
+		public async Task<IActionResult> UpdateReturnData([FromBody] UpdateReturnDataList data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateReturndata @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10",
-				   data.UserName,data.MaterialNumber, data.SerialNumber, data.OrderNumber,
-				   data.LocationReturnedFrom, data.ReturnedDate, data.RackLocation, data.ReturnType, data.ReturnedBy, data.Returns, data.ExistOrderNumber);
-				return Ok();
-			}
+			await _outboundStockService.UpdateReturnDataAsync(data, cancellationToken);
 
-
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Updated(message: "Return data updated successfully.");
 		}
 
-        [HttpPost("DeleteReturnData/{MaterialNumber}/{SerialNumber}/{ReturnStockCIIKey}")]
-        public async Task<IActionResult> DeleteReturnData(string MaterialNumber,string SerialNumber,int ReturnStockCIIKey)
-        {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+		[HttpPost("DeleteReturnData/{MaterialNumber}/{SerialNumber}/{ReturnStockCIIKey}")]
+		public async Task<IActionResult> DeleteReturnData(string MaterialNumber, string SerialNumber, int ReturnStockCIIKey, CancellationToken cancellationToken)
+		{
+			await _outboundStockService.DeleteReturnDataAsync(MaterialNumber, SerialNumber, ReturnStockCIIKey, cancellationToken);
 
-            try
-            {
-                var deletedRows = await _context.Database.ExecuteSqlRawAsync(
-                    @"DELETE FROM sm_ReturnStock_CII  
-              WHERE SerialNumber = @p0 
-              AND MaterialNumber = @p1 
-              AND ReturnStockCIIKey = @p2",
-                    SerialNumber,
-                    MaterialNumber,
-                    ReturnStockCIIKey);
+			return Deleted(message: "Return data deleted successfully.");
+		}
 
-                if (deletedRows == 0)
-                {
-                    return NotFound("No return data found to delete.");
-                }
-
-                await _context.Database.ExecuteSqlRawAsync(
-                    @"UPDATE sm_Inbound_StockCII 
-              SET Status = 'Outward' 
-              WHERE SerialNumber = @p0 
-              AND MaterialNumber = @p1",
-                    SerialNumber,
-                    MaterialNumber);
-
-                await transaction.CommitAsync();
-
-                return Ok("Return data deleted successfully.");
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                // _logger.LogError(ex, "Error deleting return data");
-
-                return StatusCode(500, "An error occurred while deleting return data.");
-            }
-        }
+		// ------------------------------------------------------------------ Staging
 
 		[HttpPost("AddStaging")]
-		public async Task<IActionResult> AddStaging([FromBody] StagingModel data)
+		public async Task<IActionResult> AddStaging([FromBody] StagingModel data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				var userCode = await _context.Database
-					.SqlQueryRaw<string>(
-						"SELECT Pk_UserCode FROM sm_users WHERE LoginId = @p0",
-						data.UserName)
-					.FirstOrDefaultAsync();
+			await _outboundStockService.AddStagingAsync(data, cancellationToken);
 
-				if (string.IsNullOrEmpty(userCode))
-					return BadRequest("Invalid User.");
-
-				await _context.Database.ExecuteSqlRawAsync(
-					@"EXEC AddStaging
-        @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7",
-					data.MaterialNumber,
-					data.SerialNumber,
-					data.OrderNumber,
-					data.Type,
-					data.DeviceStatus,
-					data.QCDate,
-					data.QCBy,
-					userCode);
-
-				return Ok(new
-				{
-					Success = true,
-					Message = "Staging record added successfully."
-				});
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, ex.Message);
-			}
+			return Success(message: "Staging record added successfully.");
 		}
 
 		[HttpPut("UpdateStaging")]
-		public async Task<IActionResult> UpdateStaging([FromBody] StagingModel data)
+		public async Task<IActionResult> UpdateStaging([FromBody] StagingModel data, CancellationToken cancellationToken)
 		{
-			try
-			{
-			
-				await _context.Database.ExecuteSqlRawAsync(
-					@"EXEC UpsertStaging
-        @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8",
-					data.MaterialNumber,
-					data.SerialNumber,
-					data.OrderNumber,
-					data.Type,
-					data.DeviceStatus,
-					data.QCDate,
-					data.QCBy,
-					data.Date,
-				    data.UserName);
+			await _outboundStockService.UpdateStagingAsync(data, cancellationToken);
 
-				return Ok(new
-				{
-					Success = true,
-					Message = "Staging record updated successfully."
-				});
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, ex.Message);
-			}
+			return Updated(message: "Staging record updated successfully.");
 		}
 
 		[HttpDelete("DeleteStaging/{id}")]
-		public async Task<IActionResult> DeleteStaging(int id)
+		public async Task<IActionResult> DeleteStaging(int id, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(
-					@"EXEC DeleteStaging @p0",
-					id);
+			await _outboundStockService.DeleteStagingAsync(id, cancellationToken);
 
-				return Ok(new
-				{
-					Success = true,
-					Message = "Staging record deleted successfully."
-				});
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, ex.Message);
-			}
+			return Deleted(message: "Staging record deleted successfully.");
 		}
 
-
-
+		// ------------------------------------------------------------------ Entity CRUD
 
 		// GET: api/SmOutboundStockCiis/5
 		[HttpGet("{id}")]
-        public async Task<ActionResult<SmOutboundStockCii>> GetSmOutboundStockCii(string id)
-        {
-            var smOutboundStockCii = await _context.SmOutboundStockCiis.FindAsync(id);
+		public async Task<IActionResult> GetSmOutboundStockCii(string id, CancellationToken cancellationToken)
+		{
+			var stock = await _outboundStockService.GetByIdAsync(id, cancellationToken);
 
-            if (smOutboundStockCii == null)
-            {
-                return NotFound();
-            }
+			return Success(stock, "Outbound CII stock retrieved successfully.");
+		}
 
-            return smOutboundStockCii;
-        }
+		// PUT: api/SmOutboundStockCiis/5
+		[HttpPut("{id}")]
+		public async Task<IActionResult> PutSmOutboundStockCii(string id, SmOutboundStockCii smOutboundStockCii, CancellationToken cancellationToken)
+		{
+			await _outboundStockService.UpdateAsync(id, smOutboundStockCii, cancellationToken);
 
-        // PUT: api/SmOutboundStockCiis/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutSmOutboundStockCii(string id, SmOutboundStockCii smOutboundStockCii)
-        {
-            if (id != smOutboundStockCii.DeliveryNumber)
-            {
-                return BadRequest();
-            }
+			return Updated(message: "Outbound CII stock updated successfully.");
+		}
 
-            _context.Entry(smOutboundStockCii).State = EntityState.Modified;
+		// POST: api/SmOutboundStockCiis
+		[HttpPost]
+		public async Task<IActionResult> PostSmOutboundStockCii(SmOutboundStockCii smOutboundStockCii, CancellationToken cancellationToken)
+		{
+			var created = await _outboundStockService.CreateAsync(smOutboundStockCii, cancellationToken);
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!SmOutboundStockCiiExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+			return Created(created, "Outbound CII stock created successfully.", Url.Action(nameof(GetSmOutboundStockCii), new { id = created.DeliveryNumber }));
+		}
 
-            return Ok();
-        }
+		// DELETE: api/SmOutboundStockCiis/5
+		[HttpDelete("{id}")]
+		public async Task<IActionResult> DeleteSmOutboundStockCii(string id, CancellationToken cancellationToken)
+		{
+			await _outboundStockService.DeleteAsync(id, cancellationToken);
 
-        // POST: api/SmOutboundStockCiis
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<SmOutboundStockCii>> PostSmOutboundStockCii(SmOutboundStockCii smOutboundStockCii)
-        {
-            _context.SmOutboundStockCiis.Add(smOutboundStockCii);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (SmOutboundStockCiiExists(smOutboundStockCii.DeliveryNumber))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return CreatedAtAction("GetSmOutboundStockCii", new { id = smOutboundStockCii.DeliveryNumber }, smOutboundStockCii);
-        }
-
-        // DELETE: api/SmOutboundStockCiis/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteSmOutboundStockCii(string id)
-        {
-            var smOutboundStockCii = await _context.SmOutboundStockCiis.FindAsync(id);
-            if (smOutboundStockCii == null)
-            {
-                return NotFound();
-            }
-
-            _context.SmOutboundStockCiis.Remove(smOutboundStockCii);
-            await _context.SaveChangesAsync();
-
-            return Ok();
-        }
-
-        private bool SmOutboundStockCiiExists(string id)
-        {
-            return _context.SmOutboundStockCiis.Any(e => e.DeliveryNumber == id);
-        }
-    }
+			return Deleted(message: "Outbound CII stock deleted successfully.");
+		}
+	}
 }

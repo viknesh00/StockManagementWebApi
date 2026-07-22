@@ -1,121 +1,63 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models;
+using StockManagementWebApi.Services;
 
 namespace StockManagementWebApi.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class SmCompaniesController : ControllerBase
-    {
-        private readonly MydbContext _context;
+	[Route("api/[controller]")]
+	public class SmCompaniesController : BaseApiController
+	{
+		private readonly ISmCompanyService _companyService;
 
-        public SmCompaniesController(MydbContext context)
-        {
-            _context = context;
-        }
+		public SmCompaniesController(ISmCompanyService companyService)
+		{
+			_companyService = companyService;
+		}
 
-        // GET: api/SmCompanies
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<SmCompany>>> GetSmCompanies()
-        {
-            return await _context.SmCompanies.ToListAsync();
-        }
+		// GET: api/SmCompanies
+		[HttpGet]
+		public async Task<IActionResult> GetSmCompanies(CancellationToken cancellationToken)
+		{
+			var companies = await _companyService.GetAllAsync(cancellationToken);
 
-        // GET: api/SmCompanies/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<SmCompany>> GetSmCompany(string id)
-        {
-            var smCompany = await _context.SmCompanies.FindAsync(id);
+			return Success(companies, "Companies retrieved successfully.");
+		}
 
-            if (smCompany == null)
-            {
-                return NotFound();
-            }
+		// GET: api/SmCompanies/5
+		[HttpGet("{id}")]
+		public async Task<IActionResult> GetSmCompany(string id, CancellationToken cancellationToken)
+		{
+			var company = await _companyService.GetByIdAsync(id, cancellationToken);
 
-            return smCompany;
-        }
+			return Success(company, "Company retrieved successfully.");
+		}
 
-        // PUT: api/SmCompanies/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutSmCompany(string id, SmCompany smCompany)
-        {
-            if (id != smCompany.PkCompanyCode)
-            {
-                return BadRequest();
-            }
+		// PUT: api/SmCompanies/5
+		[HttpPut("{id}")]
+		public async Task<IActionResult> PutSmCompany(string id, SmCompany smCompany, CancellationToken cancellationToken)
+		{
+			await _companyService.UpdateAsync(id, smCompany, cancellationToken);
 
-            _context.Entry(smCompany).State = EntityState.Modified;
+			return Updated(message: "Company updated successfully.");
+		}
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!SmCompanyExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+		// POST: api/SmCompanies
+		[HttpPost]
+		public async Task<IActionResult> PostSmCompany(SmCompany smCompany, CancellationToken cancellationToken)
+		{
+			var created = await _companyService.CreateAsync(smCompany, cancellationToken);
 
-            return Ok();
-        }
+			return Created(created, "Company created successfully.", Url.Action(nameof(GetSmCompany), new { id = created.PkCompanyCode }));
+		}
 
-        // POST: api/SmCompanies
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<SmCompany>> PostSmCompany(SmCompany smCompany)
-        {
-            _context.SmCompanies.Add(smCompany);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (SmCompanyExists(smCompany.PkCompanyCode))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+		// DELETE: api/SmCompanies/5
+		[HttpDelete("{id}")]
+		public async Task<IActionResult> DeleteSmCompany(string id, CancellationToken cancellationToken)
+		{
+			await _companyService.DeleteAsync(id, cancellationToken);
 
-            return CreatedAtAction("GetSmCompany", new { id = smCompany.PkCompanyCode }, smCompany);
-        }
-
-        // DELETE: api/SmCompanies/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteSmCompany(string id)
-        {
-            var smCompany = await _context.SmCompanies.FindAsync(id);
-            if (smCompany == null)
-            {
-                return NotFound();
-            }
-
-            _context.SmCompanies.Remove(smCompany);
-            await _context.SaveChangesAsync();
-
-            return Ok();
-        }
-
-        private bool SmCompanyExists(string id)
-        {
-            return _context.SmCompanies.Any(e => e.PkCompanyCode == id);
-        }
-    }
+			return Deleted(message: "Company deleted successfully.");
+		}
+	}
 }

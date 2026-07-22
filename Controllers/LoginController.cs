@@ -1,68 +1,34 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using StockManagementWebApi.Models;
+using Microsoft.AspNetCore.Mvc;
+using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models.LoginModel;
-
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+using StockManagementWebApi.Services;
 
 namespace StockManagementWebApi.Controllers
 {
 	[Route("api/[controller]")]
-	[ApiController]
-	public class LoginController : ControllerBase
+	public class LoginController : BaseApiController
 	{
-		private readonly MydbContext _context;
-		private readonly IWebHostEnvironment _environment;
-		private readonly IConfiguration _configuration;
+		private readonly IAuthService _authService;
 
-		public LoginController(IWebHostEnvironment environment, IConfiguration configuration, MydbContext context)
+		public LoginController(IAuthService authService)
 		{
-			_environment = environment;
-			_configuration = configuration;
-			_context = context;
+			_authService = authService;
 		}
-		[HttpPost("Login")]
-		public async Task<IActionResult> Login([FromBody] Login data)
-		{
-			try
-			{
-				var customers = _context.UserLists.FromSqlRaw(@"exec Sp_Login @p0,@p1",data.Email,data.Password).ToList();
-				
-				if (customers.Count == 0)
-				{
-					return StatusCode(500, "The User Email or Password is Invalid!!!");
-				}
-				if (customers[0].IsActive==false)
-				{
-					return StatusCode(500, "The User was InActive.. Please Contact Admin");
-				}
 
-				return Ok(customers);
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+		[HttpPost("Login")]
+		public async Task<IActionResult> Login([FromBody] Login data, CancellationToken cancellationToken)
+		{
+			var users = await _authService.LoginAsync(data, cancellationToken);
+
+			return Success(users, "Login successful.");
 		}
 
 		[HttpPost("ResetPassword")]
-		public async Task<IActionResult> ResetPassword([FromBody] ResetPassword data)
+		public async Task<IActionResult> ResetPassword([FromBody] ResetPassword data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				var customers = _context.UserLists.FromSqlRaw(@"exec Sp_Login @p0,@p1", data.Email, data.ExistPassword).ToList();
+			await _authService.ResetPasswordAsync(data, cancellationToken);
 
-				if (customers[0].Email != data.Email )
-				{
-					return StatusCode(500, "The User Email or Password is Invalid!!!");
-				}
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_ResetPassword @p0,@p1,@p2", data.Email, data.ExistPassword, data.NewPassword);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(message: "Password reset successfully.");
 		}
 	}
 }

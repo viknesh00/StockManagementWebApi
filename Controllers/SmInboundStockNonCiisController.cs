@@ -1,1094 +1,282 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Drawing;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
-using OfficeOpenXml;
+using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.NonStockCII;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using StockManagementWebApi.Services;
 
 namespace StockManagementWebApi.Controllers
 {
 	[Route("api/[controller]")]
-	[ApiController]
-	public class SmInboundStockNonCiisController : ControllerBase
+	public class SmInboundStockNonCiisController : BaseApiController
 	{
-		private readonly MydbContext _context;
-		private readonly IWebHostEnvironment _environment;
-		private readonly IConfiguration _configuration;
-		private readonly string _connectionString;
+		private readonly INonCiiStockService _nonCiiStockService;
 
-		public SmInboundStockNonCiisController(IWebHostEnvironment environment, IConfiguration configuration, MydbContext context)
+		public SmInboundStockNonCiisController(INonCiiStockService nonCiiStockService)
 		{
-			_environment = environment;
-			_configuration = configuration;
-			_context = context;
-			_connectionString = configuration.GetConnectionString("MyDBConnection");
+			_nonCiiStockService = nonCiiStockService;
 		}
 
-		// GET: api/SmInboundStockNonCiis
+		// ------------------------------------------------------------------ Listings
+
+		// GET: api/SmInboundStockNonCiis/GetSmInboundNonStockCiis/{UserName}
 		[HttpGet("GetSmInboundNonStockCiis/{UserName}")]
-		public async Task<ActionResult> GetSmInboundNonStockCiis(string UserName)
+		public async Task<IActionResult> GetSmInboundNonStockCiis(string UserName, CancellationToken cancellationToken)
 		{
-			var customers = _context.NonStockCIILists.FromSqlRaw(@"exec Non_StockCIIList @p0", UserName).ToList();
-			return Ok(customers);
+			var stock = await _nonCiiStockService.GetStockListAsync(UserName, cancellationToken);
 
-		}
-
-		[HttpPost("bulk-update")]
-		public async Task<IActionResult> BulkUpdate([FromBody] BulkUpdateRequest request)
-		{
-			if (request == null || string.IsNullOrEmpty(request.MaterialNumber) || request.SerialNumbers == null || !request.SerialNumbers.Any())
-				return BadRequest("Invalid request");
-
-			using (SqlConnection conn = new SqlConnection(_connectionString))
-			{
-				await conn.OpenAsync();
-
-				var serialList = string.Join(",", request.SerialNumbers.Select(s => $"'{s}'"));
-
-				var query = @"
-        UPDATE sm_Inbound_StockCII
-        SET 
-            RackLocation = CASE 
-                              WHEN @RackLocation IS NOT NULL AND @RackLocation <> '' 
-                              THEN @RackLocation 
-                              ELSE RackLocation 
-                           END,
-            Status = CASE 
-                        WHEN @Status IS NOT NULL AND @Status <> '' 
-                        THEN @Status 
-                        ELSE Status 
-                     END
-        WHERE MaterialNumber = @MaterialNumber
-        AND SerialNumber IN (" + serialList + ")";
-
-				using (SqlCommand cmd = new SqlCommand(query, conn))
-				{
-					cmd.Parameters.AddWithValue("@MaterialNumber", request.MaterialNumber);
-					cmd.Parameters.AddWithValue("@RackLocation", (object?)request.RackLocation ?? DBNull.Value);
-					cmd.Parameters.AddWithValue("@Status", (object?)request.Status ?? DBNull.Value);
-
-					await cmd.ExecuteNonQueryAsync();
-				}
-			}
-
-			return Ok("Updated successfully");
-		}
-
-
-		[HttpPost("BulkImportNonCII")]
-		public async Task<IActionResult> BulkImportNonCII([FromForm] AddNonCIIStockInward data)
-		{
-			if (data.file == null || data.file.Length == 0)
-				return BadRequest("No file uploaded.");
-			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
-			if (!Directory.Exists(uploadsDirectory))
-				Directory.CreateDirectory(uploadsDirectory);
-			var filePath = Path.Combine(uploadsDirectory, Guid.NewGuid() + Path.GetExtension(data.file.FileName));
-			try
-			{
-				using (var stream = new FileStream(filePath, FileMode.Create))
-				{
-					await data.file.CopyToAsync(stream);
-				}
-				ExcelPackage.LicenseContext = OfficeOpenXml.LicenseContext.NonCommercial;
-				using var package = new ExcelPackage(new FileInfo(filePath));
-				var worksheet = package.Workbook.Worksheets[0];
-				if (worksheet.Dimension == null)
-					return BadRequest("Excel file is empty.");
-				int rowCount = worksheet.Dimension.Rows;
-				// Get tenant code
-				var tenentcode = await _context.Database
-					.SqlQuery<string>($"SELECT Fk_TenentCode AS Value FROM [dbo].[sm_Users] WHERE LoginId = {data.UserName}")
-					.FirstOrDefaultAsync();
-
-				for (int row = 2; row <= rowCount; row++)
-				{
-					var materialNumber = worksheet.Cells[row, 1].Text.Trim();
-					if (string.IsNullOrWhiteSpace(materialNumber))
-						continue;
-
-					// Column 2 is now MaterialDescription, read per row
-					var materialDescription = worksheet.Cells[row, 2].Text.Trim();
-
-					// Check if material number exists for this tenant
-					var isMaterialNumberAvailable = await _context.Database
-						.SqlQuery<int>($@"
-SELECT 1 AS Value
-FROM [dbo].[sm_material_master] smm
-INNER JOIN [dbo].[sm_Users] su ON su.Pk_UserCode = smm.Fk_UserCode
-WHERE smm.MaterialNumber = {materialNumber}
-  AND su.Fk_TenentCode = {tenentcode}")
-						.AnyAsync();
-
-					if (!isMaterialNumberAvailable)
-					{
-						await _context.Database.ExecuteSqlRawAsync(
-							@"EXEC AddNonStockCII_MaterialNumber @p0, @p1, @p2",
-							data.UserName, materialNumber, materialDescription);
-					}
-
-					int quantity = 0;
-					int.TryParse(worksheet.Cells[row, 3].Text, out quantity);
-					var status = worksheet.Cells[row, 4].Text.Trim();
-
-					await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12",
-						data.DeliveryNumber, data.OrderNumber, materialNumber,
-						materialDescription, data.InwardDate, data.InwardFrom, data.ReceivedBy, data.RackLocation, quantity, data.UserName, data.PoNumber, data.Location, status);
-				}
-				return Ok(new
-				{
-					success = true,
-					message = "Bulk upload completed successfully."
-				});
-			}
-			catch (SqlException ex)
-			{
-				return BadRequest(new
-				{
-					Success = false,
-					Message = ex.Message
-				});
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, new
-				{
-					Success = false,
-					Message = ex.Message
-				});
-			}
-			finally
-			{
-				if (System.IO.File.Exists(filePath))
-					System.IO.File.Delete(filePath);
-			}
-		}
-
-
-
-		[HttpPost("NonStockCIIMaterial")]
-		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data)
-		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddNonStockCII_MaterialNumber @p0, @p1, @p2", data.userName, data.MaterialNumber, data.MaterialDescription);
-				return Ok();
-			}
-			catch (SqlException ex) when (ex.Number == 2627) // Unique Key Violation
-			{
-				return StatusCode(400, "Duplicate entry: The material number already exists.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
+			return Success(stock, "Non-CII stock list retrieved successfully.");
 		}
 
 		[HttpGet("GetInwardNonStockCiis/{MaterialNumber}/{name}")]
-		public async Task<ActionResult> GetInwardNonStockCiis(string MaterialNumber, string name)
+		public async Task<IActionResult> GetInwardNonStockCiis(string MaterialNumber, string name, CancellationToken cancellationToken)
 		{
-			var customers = _context.NonStockInwardLists.FromSqlRaw(@"exec sp_getInboundStock_NonCII @p0,@p1", MaterialNumber, name).ToList();
-			return Ok(customers);
+			var inward = await _nonCiiStockService.GetInwardListAsync(MaterialNumber, name, cancellationToken);
 
+			return Success(inward, "Non-CII inward list retrieved successfully.");
 		}
 
+		// ------------------------------------------------------------------ Bulk operations
+
+		[HttpPost("bulk-update")]
+		public async Task<IActionResult> BulkUpdate([FromBody] BulkUpdateRequest request, CancellationToken cancellationToken)
+		{
+			await _nonCiiStockService.BulkUpdateSerialsAsync(request, cancellationToken);
+
+			return Updated(message: "Updated successfully");
+		}
+
+		[HttpPost("BulkImportNonCII")]
+		public async Task<IActionResult> BulkImportNonCII([FromForm] AddNonCIIStockInward data, CancellationToken cancellationToken)
+		{
+			await _nonCiiStockService.BulkImportAsync(data, cancellationToken);
+
+			return Success(message: "Bulk upload completed successfully.");
+		}
+
+		// ------------------------------------------------------------------ Material master
+
+		[HttpPost("NonStockCIIMaterial")]
+		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data, CancellationToken cancellationToken)
+		{
+			await _nonCiiStockService.AddMaterialAsync(data, cancellationToken);
+
+			return Success(message: "Material number added successfully.");
+		}
+
+		// ------------------------------------------------------------------ Inbound
 
 		[HttpPost("AddNonStockInbounddata")]
-		public async Task<IActionResult> AddNonStockInbounddata([FromBody] AddNonStockInward data)
+		public async Task<IActionResult> AddNonStockInbounddata([FromBody] AddNonStockInward data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9, @p10, @p11, @p12", data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.MaterialDescription, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived, data.UserName, data.PoNumber, data.Location, data.Status);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _nonCiiStockService.AddInboundAsync(data, cancellationToken);
+
+			return Success(message: "Inbound data added successfully.");
 		}
 
 		[HttpPost("DeleteNonStockInbounddata/{MaterialNumber}/{DeliveryNumber}/{InboundStockNonCIIKey}/{name}")]
-		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber, string DeliveryNumber, string InboundStockNonCIIKey, string name)
+		public async Task<IActionResult> DeleteNonStockInbounddata(string MaterialNumber, string DeliveryNumber, string InboundStockNonCIIKey, string name, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteNonStockCII @p0, @p1,@p2,@p3", name, MaterialNumber, DeliveryNumber, InboundStockNonCIIKey);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _nonCiiStockService.DeleteInboundAsync(MaterialNumber, DeliveryNumber, InboundStockNonCIIKey, name, cancellationToken);
+
+			return Deleted(message: "Inbound data deleted successfully.");
 		}
 
 		[HttpPost("UpdateNonStockInbounddata")]
-		public async Task<IActionResult> UpdateNonStockInbounddata([FromBody] UpdateNonStockInward data)
+		public async Task<IActionResult> UpdateNonStockInbounddata([FromBody] UpdateNonStockInward data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateInboundStock_NonCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13,@p14", data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.ExistDeliveryNumber, data.ExistOrderNumber, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.RacKLocation, data.QuantityReceived, data.InboundStockNonCIIKey,data.PoNumber,data.Status,data.Location);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _nonCiiStockService.UpdateInboundAsync(data, cancellationToken);
+
+			return Updated(message: "Inbound data updated successfully.");
 		}
 
+		// ------------------------------------------------------------------ Outbound
 
 		[HttpPost("AddNonStockOutbounddata")]
-		public async Task<IActionResult> AddNonStockOutbounddata([FromBody] AddOutBoundNonStockCII data)
+		public async Task<IActionResult> AddNonStockOutbounddata([FromBody] AddOutBoundNonStockCII data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				// Fetch the inbound stock details
-				var customers = await _context.SmOutBounddatas
-					.FromSqlRaw(
-						@"SELECT * FROM sm_InboundStock_NonCII 
-		              WHERE materialnumber = @p0 AND IsActive = 1  ",
-						data.MaterialNumber
-					).ToListAsync();
+			await _nonCiiStockService.AddOutboundAsync(data, cancellationToken);
 
-				// Check if any data was retrieved
-				if (customers == null || customers.Count == 0)
-				{
-					return NotFound("No matching inbound stock record found.");
-				}
-
-				var customer = customers[0]; // Assuming you want to use the first row
-
-				// Validate if the delivered quantity does not exceed the available inbound quantity
-				int totalInboundQuantity = customers.Sum(c => c.DeliveredQuantity);
-
-				if (totalInboundQuantity < data.DeliveredQuantity)
-				{
-					return StatusCode(500, "Delivered quantity exceeds in-stock quantity. Please adjust the delivered quantity.");
-				}
-
-				// Deduct the requested delivered quantity from the available inbound stock
-				int remainingQuantityToWithdraw = data.DeliveredQuantity ?? 0;
-
-				foreach (var stockItem in customers)
-				{
-					if (stockItem.DeliveredQuantity <= remainingQuantityToWithdraw)
-					{
-						// Deduct the full quantity from this row
-						remainingQuantityToWithdraw -= stockItem.DeliveredQuantity;
-						stockItem.DeliveredQuantity = 0;  // Set quantity to 0
-					}
-					else
-					{
-						// Deduct only the required quantity from this row
-						stockItem.DeliveredQuantity -= remainingQuantityToWithdraw;
-						remainingQuantityToWithdraw = 0;
-						break;  // No further deduction is needed
-					}
-				}
-
-				// Add to outbound stock
-				await _context.Database.ExecuteSqlRawAsync(
-					@"EXEC Sp_AddOutboundStock_NonCII 
-		              @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9,@p10",
-					data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber,
-					data.MaterialDescription, data.OutboundDate, data.ReceiverName,
-					data.TargetLocation, data.DeliveredQuantity, data.SentBy, data.DeliveryNumber_inbound
-				);
-
-				// Update the inbound stock table
-				foreach (var stockItem in customers)
-				{
-					await _context.Database.ExecuteSqlRawAsync(
-						@"UPDATE sm_InboundStock_NonCII 
-		              SET DeliveredQuantity = @p0 
-		              WHERE materialnumber = @p1 AND deliverynumber = @p2 and InboundStockNonCIIKey= @p3",
-						stockItem.DeliveredQuantity, data.MaterialNumber, stockItem.DeliveryNumber, stockItem.InboundStockNonCIIKey
-					);
-				}
-
-				return Ok("Outbound data added successfully.");
-			}
-			catch (Exception ex)
-			{
-				// Log the exception for debugging
-				Console.WriteLine($"Error: {ex.Message}");
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(message: "Outbound data added successfully.");
 		}
 
-		// add Bulk outbound non-ci data 
 		[HttpPost("BulkAddNonStockOutbound")]
-
-		public async Task<IActionResult> BulkAddNonStockOutbound([FromBody] List<BulkAddOutboundDataNonStockCii> dataList)
-
+		public async Task<IActionResult> BulkAddNonStockOutbound([FromBody] List<BulkAddOutboundDataNonStockCii> dataList, CancellationToken cancellationToken)
 		{
+			await _nonCiiStockService.BulkAddOutboundAsync(dataList, cancellationToken);
 
-			if (dataList == null || dataList.Count == 0)
-
-				return BadRequest("No data received.");
-
-			using var transaction = await _context.Database.BeginTransactionAsync();
-
-			try
-
-			{
-
-				foreach (var data in dataList)
-
-				{
-
-					// Fetch inbound stock
-
-					var customers = await _context.SmOutBounddatas
-
-						.FromSqlRaw(@"
-
-                    SELECT *
-
-                    FROM sm_InboundStock_NonCII
-
-                    WHERE MaterialNumber = @p0
-
-                      AND IsActive = 1",
-
-							data.MaterialNumber)
-
-						.ToListAsync();
-
-					if (customers.Count == 0)
-
-						throw new Exception($"No inbound stock found for Material Number : {data.MaterialNumber}");
-
-					int totalInboundQuantity = customers.Sum(x => x.DeliveredQuantity);
-
-					if (totalInboundQuantity < data.DeliveredQuantity)
-
-					{
-
-						throw new Exception($"Insufficient stock for Material Number : {data.MaterialNumber}");
-
-					}
-
-					int remainingQuantity = data.DeliveredQuantity ?? 0;
-
-					foreach (var stock in customers)
-
-					{
-
-						if (remainingQuantity == 0)
-
-							break;
-
-						if (stock.DeliveredQuantity <= remainingQuantity)
-
-						{
-
-							remainingQuantity -= stock.DeliveredQuantity;
-
-							stock.DeliveredQuantity = 0;
-
-						}
-
-						else
-
-						{
-
-							stock.DeliveredQuantity -= remainingQuantity;
-
-							remainingQuantity = 0;
-
-						}
-
-					}
-
-					// Insert outbound
-
-					await _context.Database.ExecuteSqlRawAsync(
-
-						@"EXEC Sp_BulkAddOutboundStock_NonCII
-
-                    @p0,@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12",
-
-						data.UserName,
-
-						data.DeliveryNumber,
-
-						data.OrderNumber,
-
-						data.MaterialNumber,
-
-						data.MaterialDescription,
-
-						data.OutboundDate,
-
-						data.ReceiverName,
-
-						data.TargetLocation,
-
-						data.DeliveredQuantity,
-
-						data.SentBy,
-
-						data.DeliveryNumber_inbound,
-						data.Status,
-						data.SubStatus);
-
-					// Update inbound quantity
-
-					foreach (var stock in customers)
-
-					{
-
-						await _context.Database.ExecuteSqlRawAsync(
-
-							@"UPDATE sm_InboundStock_NonCII
-
-                      SET DeliveredQuantity = @p0
-
-                      WHERE InboundStockNonCIIKey = @p1",
-
-							stock.DeliveredQuantity,
-
-							stock.InboundStockNonCIIKey);
-
-					}
-				}
-
-				await transaction.CommitAsync();
-
-				return Ok("Bulk upload completed successfully.");
-
-			}
-
-			catch (Exception ex)
-
-			{
-
-				await transaction.RollbackAsync();
-
-				return StatusCode(500, ex.Message);
-
-			}
-
+			return Success(message: "Bulk upload completed successfully.");
 		}
-
-
 
 		[HttpGet("DeliveredDataList/{MaterialNumber}")]
-		public async Task<ActionResult> GetDeliveredDataList(string MaterialNumber)
+		public async Task<IActionResult> GetDeliveredDataList(string MaterialNumber, CancellationToken cancellationToken)
 		{
-			var customers = _context.GetNonStockDeliveredDatas
-	.FromSqlRaw("SELECT * FROM sm_OutboundStock_NonCII WHERE materialnumber = @MaterialNumber AND IsActive <> 0",
-				new SqlParameter("@MaterialNumber", MaterialNumber))
-	.ToList();
-			return Ok(customers);
+			var delivered = await _nonCiiStockService.GetDeliveredListAsync(MaterialNumber, cancellationToken);
 
+			return Success(delivered, "Delivered data retrieved successfully.");
 		}
-
-
 
 		[HttpPost("DeleteNonStockDeliverdata/{MaterialNumber}/{DeliveryNumber}/{OutboundStockNonCIIKey}/{UserName}")]
-		public async Task<IActionResult> DeleteNonStockDeliverdata(string MaterialNumber, string DeliveryNumber, string OutboundStockNonCIIKey, string Username)
+		public async Task<IActionResult> DeleteNonStockDeliverdata(string MaterialNumber, string DeliveryNumber, string OutboundStockNonCIIKey, string UserName, CancellationToken cancellationToken)
 		{
-			if (string.IsNullOrWhiteSpace(MaterialNumber) || string.IsNullOrWhiteSpace(DeliveryNumber))
-			{
-				return BadRequest("MaterialNumber and DeliveryNumber are required.");
-			}
+			await _nonCiiStockService.DeleteDeliveredAsync(MaterialNumber, DeliveryNumber, OutboundStockNonCIIKey, UserName, cancellationToken);
 
-			try
-			{
-				// Fetch outbound stock record to get the delivered quantity
-				var outboundStock = await _context.GetNonStockDeliveredDatas
-					.FromSqlRaw(
-						"SELECT * FROM sm_OutboundStock_NonCII WHERE materialnumber = @MaterialNumber AND deliverynumber = @DeliveryNumber AND OutboundStockNonCIIKey = @OutboundStockNonCIIKey AND IsActive <> 0",
-						new SqlParameter("@MaterialNumber", MaterialNumber),
-						new SqlParameter("@DeliveryNumber", DeliveryNumber),
-						new SqlParameter("@OutboundStockNonCIIKey", OutboundStockNonCIIKey)
-					).FirstOrDefaultAsync();
-
-				if (outboundStock == null)
-				{
-					return NotFound("No matching outbound stock record found.");
-				}
-
-				int deliveredQuantityToReturn = outboundStock.DeliveredQuantity;
-
-				// Fetch inbound stock records to return the quantity
-				var inboundStocks = await _context.SmOutBounddatas
-					.FromSqlRaw(
-						@"SELECT * FROM sm_InboundStock_NonCII 
-                  WHERE materialnumber = @p0 and IsActive = 1 ",
-						new SqlParameter("@p0", MaterialNumber)
-					)
-					.OrderBy(i => i.InboundStockNonCIIKey) // Order for proper reinsertion
-					.ToListAsync();
-
-				if (inboundStocks == null || inboundStocks.Count == 0)
-				{
-					return NotFound("No matching inbound stock records found.");
-				}
-
-				// Return the delivered quantity to inbound stock
-				int remainingToAdd = deliveredQuantityToReturn;
-				foreach (var stock in inboundStocks)
-				{
-					stock.DeliveredQuantity += remainingToAdd;
-					break; // Update the first available record
-				}
-
-				// Call stored procedure to delete the outbound stock record
-				await _context.Database.ExecuteSqlRawAsync(
-					@"EXEC Sp_DeleteNonStockDeliverCII @p0, @p1, @p2,@p3",
-					new SqlParameter("@p0", Username),
-					new SqlParameter("@p1", MaterialNumber),
-					new SqlParameter("@p2", DeliveryNumber),
-					new SqlParameter("@p3", OutboundStockNonCIIKey)
-				);
-
-				// Update inbound stock records
-				foreach (var stock in inboundStocks)
-				{
-					await _context.Database.ExecuteSqlRawAsync(
-						@"UPDATE sm_InboundStock_NonCII 
-                  SET DeliveredQuantity = @p0 
-                  WHERE materialnumber = @p1 AND InboundStockNonCIIKey = @p2",
-						new SqlParameter("@p0", stock.DeliveredQuantity),
-						new SqlParameter("@p1", MaterialNumber),
-						new SqlParameter("@p2", stock.InboundStockNonCIIKey)
-					);
-				}
-
-				return Ok("Non-stock delivery data deleted and inbound stock updated successfully.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
+			return Deleted(message: "Non-stock delivery data deleted and inbound stock updated successfully.");
 		}
-
-
-
-
 
 		[HttpPost("UpdateNonStockDeliverdata")]
-		public async Task<IActionResult> UpdateNonStockDeliverdata([FromBody] UpdateNonStockDeliverData data)
+		public async Task<IActionResult> UpdateNonStockDeliverdata([FromBody] UpdateNonStockDeliverData data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				if (data == null)
-				{
-					return BadRequest("Request data is null.");
-				}
+			await _nonCiiStockService.UpdateDeliveredAsync(data, cancellationToken);
 
-				// Retrieve outbound stock record to get existing delivered quantity
-				var outboundStock = await _context.GetNonStockDeliveredDatas
-					.FromSqlRaw(@"SELECT * FROM sm_OutboundStock_NonCII 
-                         WHERE materialnumber = @p0 AND deliverynumber = @p1 and OutboundStockNonCIIKey= @p2 and IsActive = 1 ",
-								 data.MaterialNumber, data.DeliveryNumber, data.OutboundStockNonCIIKey)
-					.FirstOrDefaultAsync();
-
-				if (outboundStock == null)
-				{
-					return NotFound("No matching outbound stock record found.");
-				}
-
-				int existingOutboundQuantity = data.ExistDeliveredQuantity ?? 0;
-				int quantityDifference = (data.DeliveredQuantity ?? 0) - existingOutboundQuantity;
-
-				// Retrieve inbound stock data
-				var inboundStocks = await _context.SmOutBounddatas
-					.FromSqlRaw(@"SELECT * FROM sm_InboundStock_NonCII 
-                         WHERE materialnumber = @p0 AND IsActive = 1",
-								 data.MaterialNumber)
-					.OrderBy(i => i.InboundStockNonCIIKey) // Order to manage proper deductions
-					.ToListAsync();
-
-				if (inboundStocks == null || inboundStocks.Count == 0)
-				{
-					return NotFound("No matching inbound stock record found.");
-				}
-
-				if (quantityDifference > 0)
-				{
-					// Increase outbound quantity: Deduct from inbound stock
-					int remainingToDeduct = quantityDifference;
-
-					foreach (var stock in inboundStocks)
-					{
-						if (stock.DeliveredQuantity >= remainingToDeduct)
-						{
-							stock.DeliveredQuantity -= remainingToDeduct;
-							remainingToDeduct = 0;
-							break;
-						}
-						else
-						{
-							remainingToDeduct -= stock.DeliveredQuantity;
-							stock.DeliveredQuantity = 0;
-						}
-					}
-
-					if (remainingToDeduct > 0)
-					{
-						return BadRequest("Not enough available stock to fulfill the increase in outbound quantity.");
-					}
-				}
-				else if (quantityDifference < 0)
-				{
-					// Decrease outbound quantity: Return to inbound stock
-					int remainingToAdd = -quantityDifference;
-
-					foreach (var stock in inboundStocks)
-					{
-						stock.DeliveredQuantity += remainingToAdd;
-						break; // Since we are returning stock, update the first available entry
-					}
-				}
-
-				// Update outbound stock
-				await _context.Database.ExecuteSqlRawAsync(
-					@"EXEC Sp_UpdateOutboundStock_NonCII 
-              @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9,@p10,@p11",
-					data.UserName,
-					data.DeliveryNumber,
-					data.OrderNumber,
-					data.ExistDeliveryNumber,
-					data.ExistOrderNumber,
-					data.MaterialNumber,
-					data.OutboundDate,
-					data.ReceiverName,
-					data.TargetLocation,
-					data.DeliveredQuantity,
-					data.SentBy,
-					data.OutboundStockNonCIIKey
-				);
-
-				// Update inbound stock records
-				foreach (var stock in inboundStocks)
-				{
-					await _context.Database.ExecuteSqlRawAsync(
-						@"UPDATE sm_InboundStock_NonCII 
-                  SET DeliveredQuantity = @p0 
-                  WHERE materialnumber = @p1 AND InboundStockNonCIIKey = @p2",
-						stock.DeliveredQuantity, data.MaterialNumber, stock.InboundStockNonCIIKey
-					);
-				}
-
-				return Ok("Inbound and outbound stock updated successfully.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
+			return Updated(message: "Inbound and outbound stock updated successfully.");
 		}
 
-
-
-
+		// ------------------------------------------------------------------ Returns
 
 		[HttpPost("AddNonStockReturndata")]
-		public async Task<IActionResult> AddNonStockReturndata([FromBody] AddNonStockReturnData data)
+		public async Task<IActionResult> AddNonStockReturndata([FromBody] AddNonStockReturnData data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec sp_AddReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8", data.OrderNumber, data.MaterialNumber,
-					data.ReturnLocation, data.Returndate, data.ReturnQuantity, data.ReceivedBy, data.RackLocation, data.ReturnType, data.Reason);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurr" +
-					"ed while processing your request.");
-			}
+			await _nonCiiStockService.AddReturnAsync(data, cancellationToken);
+
+			return Success(message: "Return data added successfully.");
 		}
 
 		[HttpPost("UpdateNonStockReturndata")]
-		public async Task<IActionResult> UpdateNonStockReturndata([FromBody] UpdateNonStockRetundata data)
+		public async Task<IActionResult> UpdateNonStockReturndata([FromBody] UpdateNonStockRetundata data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec sp_UpdateReturnNonStockData @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9", data.OrderNumber, data.ExistOrderNumber, data.MaterialNumber,
-					data.ReturnLocation, data.Returndate, data.ReturnQuantity, data.ReceivedBy, data.RackLocation, data.ReturnType, data.Reason);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
-		}
+			await _nonCiiStockService.UpdateReturnAsync(data, cancellationToken);
 
+			return Updated(message: "Return data updated successfully.");
+		}
 
 		[HttpPost("UpdateNonStockReturnType/{MaterialNumber}/{OrderNumber}")]
-		public async Task<IActionResult> UpdateNonStockReturnType(string MaterialNumber, string OrderNumber)
+		public async Task<IActionResult> UpdateNonStockReturnType(string MaterialNumber, string OrderNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec sp_UpdateNonStockReturnType @p0, @p1", MaterialNumber, OrderNumber);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
-		}
-		[HttpPost("DeleteNonStockReturnData/{MaterialNumber}/{OrderNumber}")]
-		public async Task<IActionResult> DeleteNonStockReturnData(string MaterialNumber, string OrderNumber)
-		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec sp_DeleteNonStockReturndata @p0, @p1", MaterialNumber, OrderNumber);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _nonCiiStockService.UpdateReturnTypeAsync(MaterialNumber, OrderNumber, cancellationToken);
+
+			return Updated(message: "Return type updated successfully.");
 		}
 
+		[HttpPost("DeleteNonStockReturnData/{MaterialNumber}/{OrderNumber}")]
+		public async Task<IActionResult> DeleteNonStockReturnData(string MaterialNumber, string OrderNumber, CancellationToken cancellationToken)
+		{
+			await _nonCiiStockService.DeleteReturnAsync(MaterialNumber, OrderNumber, cancellationToken);
+
+			return Deleted(message: "Return data deleted successfully.");
+		}
 
 		[HttpPost("GetNonStockReturnData/{MaterialNumber}")]
-		public async Task<IActionResult> GetNonStockReturnData(string MaterialNumber)
+		public async Task<IActionResult> GetNonStockReturnData(string MaterialNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
-				var customers = _context.NonStockReturnCiis.FromSqlRaw(@"exec sp_GateNonStockReturnData @p0", MaterialNumber);
-				return Ok(customers);
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			var returns = await _nonCiiStockService.GetReturnListAsync(MaterialNumber, cancellationToken);
+
+			return Success(returns, "Return data retrieved successfully.");
 		}
 
+		// ------------------------------------------------------------------ Used stock
+
 		[HttpPost("GetNonStockUsedData/{MaterialNumber}")]
-		public async Task<IActionResult> GetNonStockUsedData(string MaterialNumber)
+		public async Task<IActionResult> GetNonStockUsedData(string MaterialNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
-				var customers = _context.GetUsedStocks.FromSqlRaw(@"exec Sp_GetUsedStock_NonCII @p0", MaterialNumber);
-				return Ok(customers);
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			var usedStock = await _nonCiiStockService.GetUsedStockListAsync(MaterialNumber, cancellationToken);
+
+			return Success(usedStock, "Used stock retrieved successfully.");
 		}
 
 		[HttpPost("AddNonStockUsedData")]
-		public async Task<IActionResult> AddNonStockUsedData([FromBody] AddUsedStock data)
+		public async Task<IActionResult> AddNonStockUsedData([FromBody] AddUsedStock data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_AddUsedStock_NonCII @p0,@p1,@p2,@p3,@p4", data.OrderNumber, data.MaterialNumber, data.ReturnDate, data.ReturnLocation, data.ItemQuantity);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _nonCiiStockService.AddUsedStockAsync(data, cancellationToken);
+
+			return Success(message: "Used stock added successfully.");
 		}
 
 		[HttpPost("UpdateNonStockUsedData")]
-		public async Task<IActionResult> UpdateNonStockUsedData([FromBody] UpdateUsedStock data)
+		public async Task<IActionResult> UpdateNonStockUsedData([FromBody] UpdateUsedStock data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_UpdateUsedStock_NonCII @p0,@p1,@p2,@p3,@p4,@p5", data.OrderNumber, data.ExistOrderNumber, data.MaterialNumber, data.ReturnDate, data.ReturnLocation, data.ItemQuantity);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _nonCiiStockService.UpdateUsedStockAsync(data, cancellationToken);
+
+			return Updated(message: "Used stock updated successfully.");
 		}
 
 		[HttpPost("DeleteNonStockUsedData/{MaterialNumber}/{OrderNumber}")]
-		public async Task<IActionResult> DeleteNonStockUsedData(string MaterialNumber, string OrderNumber)
+		public async Task<IActionResult> DeleteNonStockUsedData(string MaterialNumber, string OrderNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec Sp_DeleteUsedStock_NonCII @p0,@p1", OrderNumber, MaterialNumber);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _nonCiiStockService.DeleteUsedStockAsync(MaterialNumber, OrderNumber, cancellationToken);
+
+			return Deleted(message: "Used stock deleted successfully.");
 		}
 
+		// ------------------------------------------------------------------ Dashboards
 
 		[HttpPost("DashBoard/{UserName}")]
-		public async Task<IActionResult> DashBoard(string UserName)
+		public async Task<IActionResult> DashBoard(string UserName, CancellationToken cancellationToken)
 		{
-			try
-			{
-				var CIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_cii_stock @p0", UserName);
-				var NonCIICount = _context.DashboardLists.FromSqlRaw(@"exec dashboard_Non_StockCIIList @p0", UserName);
-				var DeliveryReturnCount = _context.DashboardDeliveryCounts.FromSqlRaw(@"exec dashboard_delivery_return_count @p0", UserName);
-				return Ok(new
-				{
-					CIICounts = CIICount,
-					NonCIICounts = NonCIICount,
-					DeliveryReturnCounts = DeliveryReturnCount
+			var dashboard = await _nonCiiStockService.GetDashboardAsync(UserName, cancellationToken);
 
-				});
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(dashboard, "Dashboard retrieved successfully.");
 		}
 
 		[HttpPost("AnalyticsCII/{MaterialNumber}")]
-		public async Task<IActionResult> AnalyticsCII(string MaterialNumber)
+		public async Task<IActionResult> AnalyticsCII(string MaterialNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
+			var analytics = await _nonCiiStockService.GetCiiAnalyticsAsync(MaterialNumber, cancellationToken);
 
-				var DeliveryReturnCount = _context.AnalyticsDashboards.FromSqlRaw(@"exec AnalyticsCount_CII @p0", MaterialNumber);
-				return Ok(DeliveryReturnCount);
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(analytics, "CII analytics retrieved successfully.");
 		}
 
 		[HttpPost("AnalyticsNonCII/{MaterialNumber}")]
-		public async Task<IActionResult> AnalyticsNonCII(string MaterialNumber)
+		public async Task<IActionResult> AnalyticsNonCII(string MaterialNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
+			var analytics = await _nonCiiStockService.GetNonCiiAnalyticsAsync(MaterialNumber, cancellationToken);
 
-				var DeliveryReturnCount = _context.AnalyticsDashboards.FromSqlRaw(@"exec AnalyticsCount_NonCII @p0", MaterialNumber);
-				return Ok(DeliveryReturnCount);
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(analytics, "Non-CII analytics retrieved successfully.");
 		}
-
 
 		[HttpPost("DashBoardCharts/{Username}")]
-		public async Task<IActionResult> DashBoardCharts(string Username)
+		public async Task<IActionResult> DashBoardCharts(string Username, CancellationToken cancellationToken)
 		{
-			try
-			{
+			var charts = await _nonCiiStockService.GetDashboardChartsAsync(Username, cancellationToken);
 
-				var CIIInwardCount = _context.Dashboardcharts.FromSqlRaw(@" exec sp_CIIInwardCount @p0", Username);
-				var NonCIIInwardCount = _context.Dashboardcharts.FromSqlRaw(@"exec sp_NonCIIInwardCount @p0", Username);
-				var CIIDeliveryCount = _context.Dashboardcharts.FromSqlRaw(@" exec sp_CIIDeliveryCount @p0", Username);
-				var NonCIIDeliveryCount = _context.Dashboardcharts.FromSqlRaw(@"exec sp_NonCIIDeliveryCount @p0", Username);
-
-				return Ok(new
-				{
-					CIIInwardCounts = CIIInwardCount,
-					NonCIIInwardCounts = NonCIIInwardCount,
-					CIIDeliveryCounts = CIIDeliveryCount,
-					NonCIIDeliveryCounts = NonCIIDeliveryCount
-				});
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(charts, "Dashboard charts retrieved successfully.");
 		}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+		// ------------------------------------------------------------------ Entity CRUD
 
 		// GET: api/SmInboundStockNonCiis/5
 		[HttpGet("{id}")]
-		public async Task<ActionResult<SmInboundStockNonCii>> GetSmInboundStockNonCii(string id)
+		public async Task<IActionResult> GetSmInboundStockNonCii(string id, CancellationToken cancellationToken)
 		{
-			var smInboundStockNonCii = await _context.SmInboundStockNonCiis.FindAsync(id);
+			var stock = await _nonCiiStockService.GetByIdAsync(id, cancellationToken);
 
-			if (smInboundStockNonCii == null)
-			{
-				return NotFound();
-			}
-
-			return smInboundStockNonCii;
+			return Success(stock, "Inbound non-CII stock retrieved successfully.");
 		}
 
 		// PUT: api/SmInboundStockNonCiis/5
-		// To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
 		[HttpPut("{id}")]
-		public async Task<IActionResult> PutSmInboundStockNonCii(string id, SmInboundStockNonCii smInboundStockNonCii)
+		public async Task<IActionResult> PutSmInboundStockNonCii(string id, SmInboundStockNonCii smInboundStockNonCii, CancellationToken cancellationToken)
 		{
-			if (id != smInboundStockNonCii.DeliveryNumber)
-			{
-				return BadRequest();
-			}
+			await _nonCiiStockService.UpdateAsync(id, smInboundStockNonCii, cancellationToken);
 
-			_context.Entry(smInboundStockNonCii).State = EntityState.Modified;
-
-			try
-			{
-				await _context.SaveChangesAsync();
-			}
-			catch (DbUpdateConcurrencyException)
-			{
-				if (!SmInboundStockNonCiiExists(id))
-				{
-					return NotFound();
-				}
-				else
-				{
-					throw;
-				}
-			}
-
-			return NoContent();
+			return Updated(message: "Inbound non-CII stock updated successfully.");
 		}
 
 		// POST: api/SmInboundStockNonCiis
-		// To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
 		[HttpPost]
-		public async Task<ActionResult<SmInboundStockNonCii>> PostSmInboundStockNonCii(SmInboundStockNonCii smInboundStockNonCii)
+		public async Task<IActionResult> PostSmInboundStockNonCii(SmInboundStockNonCii smInboundStockNonCii, CancellationToken cancellationToken)
 		{
-			_context.SmInboundStockNonCiis.Add(smInboundStockNonCii);
-			try
-			{
-				await _context.SaveChangesAsync();
-			}
-			catch (DbUpdateException)
-			{
-				if (SmInboundStockNonCiiExists(smInboundStockNonCii.DeliveryNumber))
-				{
-					return Conflict();
-				}
-				else
-				{
-					throw;
-				}
-			}
+			var created = await _nonCiiStockService.CreateAsync(smInboundStockNonCii, cancellationToken);
 
-			return CreatedAtAction("GetSmInboundStockNonCii", new { id = smInboundStockNonCii.DeliveryNumber }, smInboundStockNonCii);
+			return Created(created, "Inbound non-CII stock created successfully.", Url.Action(nameof(GetSmInboundStockNonCii), new { id = created.DeliveryNumber }));
 		}
 
 		// DELETE: api/SmInboundStockNonCiis/5
 		[HttpDelete("{id}")]
-		public async Task<IActionResult> DeleteSmInboundStockNonCii(string id)
+		public async Task<IActionResult> DeleteSmInboundStockNonCii(string id, CancellationToken cancellationToken)
 		{
-			var smInboundStockNonCii = await _context.SmInboundStockNonCiis.FindAsync(id);
-			if (smInboundStockNonCii == null)
-			{
-				return NotFound();
-			}
+			await _nonCiiStockService.DeleteAsync(id, cancellationToken);
 
-			_context.SmInboundStockNonCiis.Remove(smInboundStockNonCii);
-			await _context.SaveChangesAsync();
-
-			return NoContent();
-		}
-
-		private bool SmInboundStockNonCiiExists(string id)
-		{
-			return _context.SmInboundStockNonCiis.Any(e => e.DeliveryNumber == id);
+			return Deleted(message: "Inbound non-CII stock deleted successfully.");
 		}
 	}
 }

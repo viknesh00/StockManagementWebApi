@@ -1,121 +1,63 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models;
+using StockManagementWebApi.Services;
 
 namespace StockManagementWebApi.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class SmUsersController : ControllerBase
-    {
-        private readonly MydbContext _context;
+	[Route("api/[controller]")]
+	public class SmUsersController : BaseApiController
+	{
+		private readonly ISmUserService _userService;
 
-        public SmUsersController(MydbContext context)
-        {
-            _context = context;
-        }
+		public SmUsersController(ISmUserService userService)
+		{
+			_userService = userService;
+		}
 
-        // GET: api/SmUsers
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<SmUser>>> GetSmUsers()
-        {
-            return await _context.SmUsers.ToListAsync();
-        }
+		// GET: api/SmUsers
+		[HttpGet]
+		public async Task<IActionResult> GetSmUsers(CancellationToken cancellationToken)
+		{
+			var users = await _userService.GetAllAsync(cancellationToken);
 
-        // GET: api/SmUsers/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<SmUser>> GetSmUser(int id)
-        {
-            var smUser = await _context.SmUsers.FindAsync(id);
+			return Success(users, "Users retrieved successfully.");
+		}
 
-            if (smUser == null)
-            {
-                return NotFound();
-            }
+		// GET: api/SmUsers/5
+		[HttpGet("{id}")]
+		public async Task<IActionResult> GetSmUser(int id, CancellationToken cancellationToken)
+		{
+			var user = await _userService.GetByIdAsync(id, cancellationToken);
 
-            return smUser;
-        }
+			return Success(user, "User retrieved successfully.");
+		}
 
-        // PUT: api/SmUsers/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutSmUser(int id, SmUser smUser)
-        {
-            if (id != smUser.PkUserCode)
-            {
-                return BadRequest();
-            }
+		// PUT: api/SmUsers/5
+		[HttpPut("{id}")]
+		public async Task<IActionResult> PutSmUser(int id, SmUser smUser, CancellationToken cancellationToken)
+		{
+			await _userService.UpdateAsync(id, smUser, cancellationToken);
 
-            _context.Entry(smUser).State = EntityState.Modified;
+			return Updated(message: "User updated successfully.");
+		}
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!SmUserExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+		// POST: api/SmUsers
+		[HttpPost]
+		public async Task<IActionResult> PostSmUser(SmUser smUser, CancellationToken cancellationToken)
+		{
+			var created = await _userService.CreateAsync(smUser, cancellationToken);
 
-            return Ok();
-        }
+			return Created(created, "User created successfully.", Url.Action(nameof(GetSmUser), new { id = created.PkUserCode }));
+		}
 
-        // POST: api/SmUsers
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<SmUser>> PostSmUser(SmUser smUser)
-        {
-            _context.SmUsers.Add(smUser);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (SmUserExists(smUser.PkUserCode))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+		// DELETE: api/SmUsers/5
+		[HttpDelete("{id}")]
+		public async Task<IActionResult> DeleteSmUser(int id, CancellationToken cancellationToken)
+		{
+			await _userService.DeleteAsync(id, cancellationToken);
 
-            return CreatedAtAction("GetSmUser", new { id = smUser.PkUserCode }, smUser);
-        }
-
-        // DELETE: api/SmUsers/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteSmUser(int id)
-        {
-            var smUser = await _context.SmUsers.FindAsync(id);
-            if (smUser == null)
-            {
-                return NotFound();
-            }
-
-            _context.SmUsers.Remove(smUser);
-            await _context.SaveChangesAsync();
-
-            return Ok();
-        }
-
-        private bool SmUserExists(int id)
-        {
-            return _context.SmUsers.Any(e => e.PkUserCode == id);
-        }
-    }
+			return Deleted(message: "User deleted successfully.");
+		}
+	}
 }

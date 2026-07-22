@@ -1,204 +1,121 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.BlazorIdentity.Pages.Manage;
+using Microsoft.AspNetCore.Mvc;
+using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.UserManagement;
-
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+using StockManagementWebApi.Services;
 
 namespace StockManagementWebApi.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class UserManagementController : ControllerBase
-    {
-        private readonly MydbContext _context;
-        private readonly IWebHostEnvironment _environment;
-        private readonly IConfiguration _configuration;
+	[Route("api/[controller]")]
+	public class UserManagementController : BaseApiController
+	{
+		private readonly IUserManagementService _userManagementService;
 
-        public UserManagementController(IWebHostEnvironment environment, IConfiguration configuration, MydbContext context)
-        {
-            _environment = environment;
-            _configuration = configuration;
-            _context = context;
-        }
+		public UserManagementController(IUserManagementService userManagementService)
+		{
+			_userManagementService = userManagementService;
+		}
 
-        [HttpGet("GetCompanyList/{UserName}")]
-        public async Task<ActionResult> GetCompanyList(string UserName)
-        {
-            var customers = _context.CompanyLists.FromSqlRaw(@"exec CompanyList @p0", UserName).ToList();
-            return Ok(customers);
+		// ------------------------------------------------------------------ Companies
 
-        }
+		[HttpGet("GetCompanyList/{UserName}")]
+		public async Task<IActionResult> GetCompanyList(string UserName, CancellationToken cancellationToken)
+		{
+			var companies = await _userManagementService.GetCompanyListAsync(UserName, cancellationToken);
 
-        [HttpPost("AddCompanyUserManagement")]
-        public async Task<IActionResult> AddCompanyUserManagement([FromBody] AddCompany data)
-        {
-            try
-            {
-                await _context.Database.ExecuteSqlRawAsync(@"exec AddCompany @p0,@p1,@p2", data.CompanyId,data.CompanyName,data.DomainName);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, "An error occurred while processing your request.");
-            }
-        }
+			return Success(companies, "Company list retrieved successfully.");
+		}
+
+		[HttpPost("AddCompanyUserManagement")]
+		public async Task<IActionResult> AddCompanyUserManagement([FromBody] AddCompany data, CancellationToken cancellationToken)
+		{
+			await _userManagementService.AddCompanyAsync(data, cancellationToken);
+
+			return Success(message: "Company created successfully.");
+		}
+
 		[HttpPost("UpdateCompanyUserManagement")]
-		public async Task<IActionResult> UpdateCompanyUserManagement([FromBody] UpdateCompany data)
+		public async Task<IActionResult> UpdateCompanyUserManagement([FromBody] UpdateCompany data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateCompany @p0,@p1,@p2,@p3", data.CompanyId,data.ExistCompanyId, data.CompanyName, data.DomainName);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
-		}
-		[HttpPost("DeleteCompanyUserManagement/{CompanyId}")]
-		public async Task<IActionResult> DeleteCompanyUserManagement(string CompanyId)
-		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(
-					"UPDATE sm_Companies SET CompanyStatus = 0 WHERE Pk_CompanyCode = {0}", CompanyId);
+			await _userManagementService.UpdateCompanyAsync(data, cancellationToken);
 
-				return Ok("Company status updated successfully.");
-			}
-			catch (Exception ex)
-			{
-				// Log the exception details (if logging is configured)
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Updated(message: "Company updated successfully.");
 		}
+
+		[HttpPost("DeleteCompanyUserManagement/{CompanyId}")]
+		public async Task<IActionResult> DeleteCompanyUserManagement(string CompanyId, CancellationToken cancellationToken)
+		{
+			await _userManagementService.DeactivateCompanyAsync(CompanyId, cancellationToken);
+
+			return Deleted(message: "Company status updated successfully.");
+		}
+
+		// ------------------------------------------------------------------ Tenants
 
 		[HttpGet("GetTenetList/{CompanyCode}")]
-		public async Task<ActionResult> GetTenetList( string CompanyCode)
+		public async Task<IActionResult> GetTenetList(string CompanyCode, CancellationToken cancellationToken)
 		{
-			var customers = _context.TenetLists.FromSqlRaw(@"exec TenentList @p0", CompanyCode).ToList();
-			return Ok(customers);
+			var tenants = await _userManagementService.GetTenantListAsync(CompanyCode, cancellationToken);
 
+			return Success(tenants, "Tenant list retrieved successfully.");
 		}
 
 		[HttpPost("AddTenet")]
-		public async Task<IActionResult> AddTenet([FromBody] AddTenet data)
+		public async Task<IActionResult> AddTenet([FromBody] AddTenet data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec addtenent @p0,@p1,@p2,@p3", data.TenentCode, data.TenentLocation, data.TenentName, data.CompanyCode);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			await _userManagementService.AddTenantAsync(data, cancellationToken);
+
+			return Success(message: "Tenant created successfully.");
 		}
 
 		[HttpPost("UpdateTenet")]
-		public async Task<IActionResult> UpdateTenet([FromBody] UpdateTenet data)
+		public async Task<IActionResult> UpdateTenet([FromBody] UpdateTenet data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec updatetenent @p0,@p1,@p2,@p3,@p4", data.TenentCode,data.ExistTenentCode, data.TenentLocation, data.TenentName, data.CompanyCode);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
-		}
+			await _userManagementService.UpdateTenantAsync(data, cancellationToken);
 
+			return Updated(message: "Tenant updated successfully.");
+		}
 
 		[HttpPost("DeleteTenet/{CompanyId}/{TenetIdId}")]
-		public async Task<IActionResult> DeleteTenet(string TenetIdId, string CompanyId)
+		public async Task<IActionResult> DeleteTenet(string TenetIdId, string CompanyId, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(
-					"UPDATE sm_Tenents SET TenentStatus = 0 WHERE Pk_TenentCode = {0} and Fk_CompanyCode={1}", TenetIdId, CompanyId);
+			await _userManagementService.DeactivateTenantAsync(TenetIdId, CompanyId, cancellationToken);
 
-				return Ok("Company Tenent deleted successfully.");
-			}
-			catch (Exception ex)
-			{
-				// Log the exception details (if logging is configured)
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Deleted(message: "Company Tenent deleted successfully.");
 		}
 
-
-
-		
-
-		//User Management
+		// ------------------------------------------------------------------ Users
 
 		[HttpPost("AddUser")]
-		public async Task<IActionResult> AddUser([FromBody] AddUser data)
+		public async Task<IActionResult> AddUser([FromBody] AddUser data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				var customers = _context.Database.SqlQueryRaw<string>("select LoginId from sm_Users where LoginId={0} ", data.Email).ToList();
+			await _userManagementService.AddUserAsync(data, cancellationToken);
 
-				if (customers.Count > 0) 
-				{
-					return StatusCode(500, "The User Email Already Exist!!!");
-				}
-
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddUser @p0,@p1,@p2,@p3,@p4,@p5,@p6",
-					data.UserCode, data.UserName, data.Email, data.UserType, data.AccessLevel, data.Password,data.TenentCode);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Success(message: "User created successfully.");
 		}
 
 		[HttpGet("GetUserList/{TenentCode}")]
-		public async Task<ActionResult> GetUserList( string TenentCode)
+		public async Task<IActionResult> GetUserList(string TenentCode, CancellationToken cancellationToken)
 		{
-			var customers = _context.UserLists.FromSqlRaw(@"exec UserList @p0", TenentCode).ToList();
-			return Ok(customers);
+			var users = await _userManagementService.GetUserListAsync(TenentCode, cancellationToken);
 
+			return Success(users, "User list retrieved successfully.");
 		}
 
 		[HttpPost("UpdateUser")]
-		public async Task<IActionResult> UpdateUser([FromBody] UpdateUser data)
+		public async Task<IActionResult> UpdateUser([FromBody] UpdateUser data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec UpdateUser @p0,@p1,@p2,@p3,@p4", data.UserCode, data.UserName, data.UserType, data.AccessLevel,data.UserStatus);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
-		}
+			await _userManagementService.UpdateUserAsync(data, cancellationToken);
 
+			return Updated(message: "User updated successfully.");
+		}
 
 		[HttpPost("DeleteUser/{UserId}")]
-		public async Task<IActionResult> DeleteUser(int UserId)
+		public async Task<IActionResult> DeleteUser(int UserId, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(
-					"UPDATE sm_Users SET IsActive = 0 WHERE Pk_UserCode = {0}", UserId);
+			await _userManagementService.DeactivateUserAsync(UserId, cancellationToken);
 
-				return Ok("User Deleted successfully.");
-			}
-			catch (Exception ex)
-			{
-				// Log the exception details (if logging is configured)
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Deleted(message: "User Deleted successfully.");
 		}
-
-
-
-
-
 	}
 }

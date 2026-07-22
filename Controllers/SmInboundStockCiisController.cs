@@ -1,698 +1,196 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
-using OfficeOpenXml;
+using StockManagementWebApi.Common.Controllers;
 using StockManagementWebApi.Models;
 using StockManagementWebApi.Models.NonStockCII;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using StockManagementWebApi.Services;
 
 namespace StockManagementWebApi.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class SmInboundStockCiisController : ControllerBase
-    {
-        private readonly MydbContext _context;
-		private readonly IWebHostEnvironment _environment;
-		private readonly IConfiguration _configuration;
+	[Route("api/[controller]")]
+	public class SmInboundStockCiisController : BaseApiController
+	{
+		private readonly IInboundStockCiiService _inboundStockService;
 
-		public SmInboundStockCiisController(IWebHostEnvironment environment, IConfiguration configuration,MydbContext context)
-        {
-			_environment = environment;
-			_configuration = configuration;
-			_context = context;
-        }
+		public SmInboundStockCiisController(IInboundStockCiiService inboundStockService)
+		{
+			_inboundStockService = inboundStockService;
+		}
 
-        // GET: api/SmInboundStockCiis
-        [HttpGet("GetSmInboundStockCiis/{UserName}")]
-        public async Task<ActionResult> GetSmInboundStockCiis(string UserName)
-        {
-			var customers = _context.StockCiiLists.FromSqlRaw(@"exec StockCIIList @p0", UserName).ToList();
-			return Ok(customers);
-			//return await _context.SmInboundStockCiis.ToListAsync();
-        }
+		// ------------------------------------------------------------------ Listings
+
+		// GET: api/SmInboundStockCiis/GetSmInboundStockCiis/{UserName}
+		[HttpGet("GetSmInboundStockCiis/{UserName}")]
+		public async Task<IActionResult> GetSmInboundStockCiis(string UserName, CancellationToken cancellationToken)
+		{
+			var stock = await _inboundStockService.GetStockListAsync(UserName, cancellationToken);
+
+			return Success(stock, "CII stock list retrieved successfully.");
+		}
+
 		[HttpGet("GetReportStockCiis/{UserName}")]
-		public async Task<ActionResult> GetReportStockCiis(string UserName)
+		public async Task<IActionResult> GetReportStockCiis(string UserName, CancellationToken cancellationToken)
 		{
-			var customers = _context.ReportCiis.FromSqlRaw(@"exec ReportCIIList @p0", UserName).ToList();
-			return Ok(customers);
-			//return await _context.SmInboundStockCiis.ToListAsync();
+			var report = await _inboundStockService.GetReportAsync(UserName, cancellationToken);
+
+			return Success(report, "CII stock report retrieved successfully.");
 		}
 
-        [HttpGet("GetLogmanagementRecord")]
-        public async Task<ActionResult> GetLogmanagementRecord()
-        {
-            var logRecords = await _context.Log_records.FromSqlRaw("SELECT * FROM Log_record").ToListAsync();
-            return Ok(logRecords);
-            //return await _context.SmInboundStockCiis.ToListAsync();
-        }
+		[HttpGet("GetLogmanagementRecord")]
+		public async Task<IActionResult> GetLogmanagementRecord(CancellationToken cancellationToken)
+		{
+			var logRecords = await _inboundStockService.GetLogRecordsAsync(cancellationToken);
+
+			return Success(logRecords, "Log records retrieved successfully.");
+		}
+
+		[HttpGet("GetOverallCIIStock/{UserName}")]
+		public async Task<IActionResult> GetOverallCIIStock(string UserName, CancellationToken cancellationToken)
+		{
+			var stock = await _inboundStockService.GetOverallStockAsync(UserName, cancellationToken);
+
+			return Success(stock, "Overall CII stock retrieved successfully.");
+		}
+
+		[HttpPost("SearchSerialNumber/{username}/{SerialNumber}")]
+		public async Task<IActionResult> GetSmInboundStockCii(string username, string SerialNumber, CancellationToken cancellationToken)
+		{
+			var results = await _inboundStockService.SearchBySerialNumberAsync(username, SerialNumber, cancellationToken);
+
+			return Success(results, "Serial number search completed successfully.");
+		}
+
+		// GET: api/SmInboundStockCiis/{MaterialNumber}/{SerialNumber}/{name}
+		[HttpGet("{MaterialNumber}/{SerialNumber}/{name}")]
+		public async Task<IActionResult> GetSmInboundStockCiii(string MaterialNumber, string? SerialNumber, string name, CancellationToken cancellationToken)
+		{
+			var results = await _inboundStockService.GetByMaterialAndSerialAsync(MaterialNumber, SerialNumber, name, cancellationToken);
+
+			return Success(results, "CII stock retrieved successfully.");
+		}
+
+		// ------------------------------------------------------------------ Imports
+
 		[HttpPost("compare")]
-		public async Task<IActionResult> CompareMaterials([FromForm] ExcelCompareRequest data)
+		public async Task<IActionResult> CompareMaterials([FromForm] ExcelCompareRequest data, CancellationToken cancellationToken)
 		{
-			if (data.file == null || data.file.Length == 0)
-				return BadRequest("No file uploaded.");
+			var results = await _inboundStockService.CompareMaterialsAsync(data, cancellationToken);
 
-			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
-			if (!Directory.Exists(uploadsDirectory))
-				Directory.CreateDirectory(uploadsDirectory);
-
-			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
-			await using (var stream = new FileStream(filePath, FileMode.Create))
-			{
-				await data.file.CopyToAsync(stream);
-			}
-
-			var excelData = new List<(string PoolName, string MaterialNumber, int ExcelStatus)>();
-			var resultList = new List<MaterialComparisonResult>();
-
-			try
-			{
-				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-				using var package = new ExcelPackage(new FileInfo(filePath));
-				var worksheet = package.Workbook.Worksheets[0];
-				int rowCount = worksheet.Dimension.Rows;
-
-				for (int row = 2; row <= rowCount; row++)
-				{
-					string poolName = worksheet.Cells[row, 2].Text?.Trim();
-					string materialNumber = worksheet.Cells[row, 3].Text?.Trim();
-					int.TryParse(worksheet.Cells[row, 12].Text?.Trim(), out int excelStatus);
-
-					if (!string.IsNullOrEmpty(materialNumber))
-					{
-						excelData.Add((poolName, materialNumber, excelStatus));
-					}
-				}
-
-				// 1. Build distinct, comma-separated material list for SQL
-				var distinctMaterialNumbers = excelData.Select(x => x.MaterialNumber).Distinct();
-				string materialParam = string.Join(",", distinctMaterialNumbers.Select(m => $"'{m}'"));
-
-				// 2. Query DB once
-				var dbData = await _context.StockCiiLists
-					.FromSqlRaw("EXEC MaterialCIIListBulk @p0, @p1", data.UserName, materialParam)
-					.ToListAsync();
-
-				// 3. Build a lookup dictionary
-				var dbLookup = dbData.ToDictionary(x => x.materialNumber, StringComparer.OrdinalIgnoreCase);
-
-				// 4. Match Excel to DB
-				foreach (var row in excelData)
-				{
-					dbLookup.TryGetValue(row.MaterialNumber, out var dbItem);
-
-					resultList.Add(new MaterialComparisonResult
-					{
-						PoolName = row.PoolName,
-						ExcelMaterialNumber = row.MaterialNumber,
-						ExcelStatus = row.ExcelStatus,
-						DbMaterialNumber = dbItem?.materialNumber,
-						newstock = dbItem?.newstock,
-						usedstock = dbItem?.usedstock,
-						Damaged = dbItem?.Damaged,
-						BreakFix = dbItem?.BreakFix
-					});
-				}
-
-				return Ok(resultList);
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"Error: {ex.Message}");
-			}
-			finally
-			{
-				if (System.IO.File.Exists(filePath))
-					System.IO.File.Delete(filePath);
-			}
+			return Success(results, "Material comparison completed successfully.");
 		}
-
-
-
 
 		[HttpPost("AddBulkMaterialStock")]
-		public async Task<IActionResult> Importstockdate1(AddStockInward data)
+		public async Task<IActionResult> Importstockdate1(AddStockInward data, CancellationToken cancellationToken)
 		{
-			if (data.file == null || data.file.Length == 0)
-				return BadRequest("No file uploaded.");
+			await _inboundStockService.ImportBulkMaterialStockAsync(data, cancellationToken);
 
-			var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
-
-			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
-			if (!Directory.Exists(uploadsDirectory))
-			{
-				Directory.CreateDirectory(uploadsDirectory);
-			}
-
-			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
-			try
-			{
-				using (var stream = new FileStream(filePath, FileMode.Create))
-				{
-					data.file.CopyTo(stream);
-				}
-
-				var inboundStocks = new List<Dictionary<string, object>>();
-				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-				using (var package = new ExcelPackage(new FileInfo(filePath)))
-				{
-					var worksheet = package.Workbook.Worksheets[0];
-					var rowCount = worksheet.Dimension.Rows;
-					for (int row = 2; row <= rowCount; row++)
-					{
-						if (worksheet.Cells[row, 1].Text != "")
-						{
-							var stock = new Dictionary<string, object>
-					{
-						{ "MaterialNumber", worksheet.Cells[row, 1].Text },
-						{ "MaterialDescription", worksheet.Cells[row, 2].Text },
-						{ "SerialNumber", worksheet.Cells[row, 3].Text },
-						{ "Quantity", int.TryParse(worksheet.Cells[row, 4].Text, out int qty) ? qty : 0 },
-						{ "Status", worksheet.Cells[row, 5].Text }
-					};
-							inboundStocks.Add(stock);
-						}
-					}
-				}
-
-				if (inboundStocks.Count == 0)
-					return BadRequest("The Excel file contains no data.");
-
-				var tenentcode = await _context.Database
-					.SqlQuery<string>($"SELECT Fk_TenentCode AS Value FROM [dbo].[sm_Users] WHERE LoginId = {data.UserName}")
-					.FirstOrDefaultAsync();
-
-				foreach (var stock in inboundStocks)
-				{
-					var isMaterialNumberAvailable = await _context.Database
-						.SqlQuery<int>($@"
-SELECT 1 AS Value
-FROM [dbo].[sm_material_master] smm
-INNER JOIN [dbo].[sm_Users] su ON su.Pk_UserCode = smm.Fk_UserCode
-WHERE smm.MaterialNumber = {stock["MaterialNumber"]}
-  AND su.Fk_TenentCode = {tenentcode}")
-						.AnyAsync();
-
-					if (!isMaterialNumberAvailable)
-					{
-						await _context.Database.ExecuteSqlRawAsync(
-							@"EXEC AddMaterialNumberNew @p0, @p1, @p2",
-							data.UserName, stock["MaterialNumber"], stock["MaterialDescription"]);
-					}
-
-					await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14",
-						data.UserName, data.DeliveryNumber, data.OrderNumber, stock["MaterialNumber"],
-						stock["MaterialDescription"], stock["SerialNumber"],
-						stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation, data.PoNumber, data.Location);
-				}
-
-				return Ok("Data imported successfully.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
-			finally
-			{
-				if (System.IO.File.Exists(filePath))
-					System.IO.File.Delete(filePath);
-			}
+			return Success(message: "Data imported successfully.");
 		}
 
 		[HttpPost("import")]
-		public async Task<IActionResult> ImportStockData( AddStockInward data)
+		public async Task<IActionResult> ImportStockData(AddStockInward data, CancellationToken cancellationToken)
 		{
+			await _inboundStockService.ImportStockDataAsync(data, cancellationToken);
 
-			if (data.file == null || data.file.Length == 0)
-				return BadRequest("No file uploaded.");
-			var userCodes = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
-
-
-			// Define the uploads directory
-			var uploadsDirectory = Path.Combine(_environment.ContentRootPath, "Uploads");
-
-			// Create the directory if it doesn't exist
-			if (!Directory.Exists(uploadsDirectory))
-			{
-				Directory.CreateDirectory(uploadsDirectory);
-			}
-
-			// Full file path
-			var filePath = Path.Combine(uploadsDirectory, data.file.FileName);
-
-			try
-			{
-				// Save the uploaded file
-				using (var stream = new FileStream(filePath, FileMode.Create))
-				{
-					await data.file.CopyToAsync(stream);
-				}
-
-				// Read data from Excel
-				var inboundStocks = new List<Dictionary<string, object>>();
-				ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-
-				using (var package = new ExcelPackage(new FileInfo(filePath)))
-				{
-					var worksheet = package.Workbook.Worksheets[0]; // Assuming data is in the first sheet
-					var rowCount = worksheet.Dimension.Rows;
-
-					for (int row = 2; row <= rowCount; row++) // Assuming first row is the header
-					{
-						if (worksheet.Cells[row, 1].Text !="")
-						{
-							var stock = new Dictionary<string, object>
-					{
-
-							{ "SerialNumber", worksheet.Cells[row, 1].Text },
-							{ "Quantity", int.TryParse(worksheet.Cells[row, 2].Text, out int qty) ? qty : 0 },
-							{ "Status", worksheet.Cells[row, 3].Text }
-							//{ "DeliveryNumber", worksheet.Cells[row, 4].Text },
-							//{ "DeliveryNumber", worksheet.Cells[row, 1].Text },																																																																																																																					
-							//{ "OrderNumber", worksheet.Cells[row, 2].Text },
-							//{ "MaterialNumber", worksheet.Cells[row, 3].Text },
-							//{ "MaterialDescription", worksheet.Cells[row, 3].Text },
-							//{ "SerialNumber", worksheet.Cells[row, 4].Text },
-							//{ "Quantity", int.TryParse(worksheet.Cells[row, 5].Text, out int qty) ? qty : 0 },
-							//{ "InwardDate", DateTime.TryParse(worksheet.Cells[row, 6].Text, out DateTime rcvDate) ? rcvDate : (DateTime?)null },
-							//{ "SourceLocation", worksheet.Cells[row, 8].Text },
-							//{ "ReceivedBy", worksheet.Cells[row, 9].Text },
-							//{ "Status", worksheet.Cells[row, 10].Text },
-							//{ "RackLocation", worksheet.Cells[row, 11].Text },
-						};
-							inboundStocks.Add(stock);
-						}
-					}
-				}
-
-				if (inboundStocks.Count == 0)
-					return BadRequest("The Excel file contains no data.");
-
-				// Insert data into the database
-				//var connectionString = _configuration.GetConnectionString("MyDBConnection");
-				//using (var connection = new SqlConnection(connectionString))
-				//{
-				//	await connection.OpenAsync();
-
-				foreach (var stock in inboundStocks)
-				{
-                    await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14",data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, 
-						data.MaterialDescription, stock["SerialNumber"],
-				stock["Quantity"], data.Inwarddate, data.InwardFrom, data.ReceivedBy, stock["Status"], userCodes[0], data.RacKLocation, data.PoNumber, data.Location);
-
-                    //var query = @"
-                    //                  INSERT INTO sm_Inbound_StockCII (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription,SerialNumber,Quantity,InwardDate,SourceLocation,ReceivedBy,Status,RackLocation,Fk_UserCode)
-                    //                  VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription,@SerialNumber,@Quantity,@InwardDate,@SourceLocation,@ReceivedBy,@Status,@RackLocation,@UserCodes);";
-
-                    //using (var command = new SqlCommand(query, connection))
-                    //{
-                    //	//command.Parameters.AddWithValue("@DeliveryNumber", stock["DeliveryNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@OrderNumber", stock["OrderNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@MaterialNumber", stock["MaterialNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@MaterialDescription", stock["MaterialDescription"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@InwardDate", stock["InwardDate"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@SourceLocation", stock["SourceLocation"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@ReceivedBy", stock["ReceivedBy"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-                    //	//command.Parameters.AddWithValue("@RackLocation", stock["RackLocation"] ?? DBNull.Value);
-                    //	command.Parameters.Add(new SqlParameter("@DeliveryNumber", SqlDbType.NVarChar)
-                    //	{
-                    //		Value = (object?)data.DeliveryNumber ?? DBNull.Value
-                    //	});
-
-                    //	command.Parameters.Add(new SqlParameter("@OrderNumber", SqlDbType.NVarChar)
-                    //	{
-                    //		Value = (object?)data.OrderNumber ?? DBNull.Value
-                    //	});
-                    //	command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
-                    //	command.Parameters.AddWithValue("@MaterialDescription",data.MaterialDescription);
-                    //	command.Parameters.AddWithValue("@SerialNumber", stock["SerialNumber"] ?? DBNull.Value);
-                    //	command.Parameters.AddWithValue("@Quantity", stock["Quantity"] ?? DBNull.Value);
-                    //	command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
-
-                    //	command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
-                    //	command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
-                    //	command.Parameters.AddWithValue("@Status", stock["Status"] ?? DBNull.Value);
-                    //	command.Parameters.AddWithValue("@UserCodes", userCodes[0]);
-                    //	command.Parameters.Add(new SqlParameter("@RackLocation", SqlDbType.NVarChar)
-                    //	{
-                    //		Value = (object?)data.RacKLocation ?? DBNull.Value
-                    //	});
-
-
-                    //	await command.ExecuteNonQueryAsync();
-                    //}
-                }
-				//}
-
-				return Ok("Data imported successfully.");
-			}
-			catch (SqlException sqlEx)
-			{
-				return StatusCode(400, "Duplicate entry: The Serial number already exists.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
-			finally
-			{
-				// Cleanup the uploaded file
-				if (System.IO.File.Exists(filePath))
-					System.IO.File.Delete(filePath);
-			}
+			return Success(message: "Data imported successfully.");
 		}
-
 
 		[HttpPost("ImportSingleStockData")]
-		public async Task<IActionResult> ImportSingleStockDataF([FromBody] AddSingleStockInward data)
+		public async Task<IActionResult> ImportSingleStockDataF([FromBody] AddSingleStockInward data, CancellationToken cancellationToken)
 		{
-			if (data == null)
-			{
-				return BadRequest("Invalid request data.");
-			}
+			await _inboundStockService.ImportSingleStockAsync(data, cancellationToken);
 
-			try
-			{
-				var userCode = await _context.Database.SqlQueryRaw<string>("SELECT Pk_UserCode FROM sm_users WHERE loginId = @p0", data.UserName).ToListAsync();
-
-                if (userCode[0] ==  null) // Handle case when user is not found
-				{
-					return BadRequest("User not found.");
-				}
-
-                await _context.Database.ExecuteSqlRawAsync(@"exec Addsinglestock @p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10 ,@p11,@p12,@p13,@p14", data.UserName, data.DeliveryNumber, data.OrderNumber, data.MaterialNumber, data.MaterialDescription, data.SerialNumber,
-				data.Quantity, data.Inwarddate, data.InwardFrom, data.ReceivedBy, data.Status, userCode[0], data.RacKLocation, data.PoNumber, data.Location);
-
-                //var connectionString = _configuration.GetConnectionString("MyDBConnection");
-
-                //using (var connection = new SqlConnection(connectionString))
-                //{
-                //	await connection.OpenAsync();
-                //	var query = @"
-                //            INSERT INTO sm_Inbound_StockCII 
-                //            (DeliveryNumber, OrderNumber, MaterialNumber, MaterialDescription, SerialNumber, Quantity, InwardDate, SourceLocation, ReceivedBy, Status, RackLocation, Fk_UserCode)
-                //            VALUES (@DeliveryNumber, @OrderNumber, @MaterialNumber, @MaterialDescription, @SerialNumber, @Quantity, @InwardDate, @SourceLocation, @ReceivedBy, @Status, @RackLocation, @UserCode);";
-
-                //	using (var command = new SqlCommand(query, connection))
-                //	{
-                //		command.Parameters.AddWithValue("@DeliveryNumber", (object?)data.DeliveryNumber ?? DBNull.Value);
-                //		command.Parameters.AddWithValue("@OrderNumber", (object?)data.OrderNumber ?? DBNull.Value);
-                //		command.Parameters.AddWithValue("@MaterialNumber", data.MaterialNumber);
-                //		command.Parameters.AddWithValue("@MaterialDescription", data.MaterialDescription);
-                //		command.Parameters.AddWithValue("@SerialNumber", data.SerialNumber);
-                //		command.Parameters.AddWithValue("@Quantity", data.Quantity);
-                //		command.Parameters.AddWithValue("@InwardDate", data.Inwarddate.HasValue ? data.Inwarddate.Value : (object)DBNull.Value);
-
-                //		command.Parameters.AddWithValue("@SourceLocation", data.InwardFrom ?? (object)DBNull.Value);
-                //		command.Parameters.AddWithValue("@ReceivedBy", data.ReceivedBy ?? (object)DBNull.Value);
-                //		command.Parameters.AddWithValue("@Status", data.Status ?? (object)DBNull.Value);
-                //		command.Parameters.AddWithValue("@UserCode", userCode[0]);
-                //		command.Parameters.AddWithValue("@RackLocation", (object?)data.RacKLocation ?? DBNull.Value);
-
-                //		await command.ExecuteNonQueryAsync();
-                //	}
-                //}
-
-                return Ok("Data imported successfully.");
-			}
-			catch (SqlException sqlEx)
-			{
-				return StatusCode(400, "Duplicate entry: The Serial number already exists.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
+			return Success(message: "Data imported successfully.");
 		}
 
-
-
-        [HttpPost("UpdateInbounddata")]
-        public async Task<IActionResult> UpdateInbounddata([FromBody] List<UpdateInboundData> data)
-        {
-            foreach (var datalist in data)
-            {
-                try
-                {
-                    await _context.Database.ExecuteSqlRawAsync(@"exec updateInboundStockCII @p0, @p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12", datalist.userName, datalist.MaterialNumber, datalist.SerialNumber, datalist.ExistSerialNumber,
-                        datalist.RackLocation, datalist.DeliveryNumber, datalist.OrderNumber, datalist.InwardDate, datalist.InwardFrom, datalist.ReceivedBy, datalist.QualityChecker, datalist.QualityCheckerStatus, datalist.QualityCheckDate);
-                    return Ok(datalist);
-                }
-                catch (Exception ex)
-                {
-                    // Log the exception or handle it as needed
-                    return StatusCode(500, "An error occurred while processing your request.");
-                }
-            }
-            return Ok("Bulk Data Uploaded Successfully");
-        }
-
-        [HttpGet("GetOverallCIIStock/{UserName}")]
-        public async Task<ActionResult> GetOverallCIIStock(string UserName)
-        {
-            var customers = _context.StockInboundCIILists.FromSqlRaw(@"exec Get_OverallCiiStock @p0", UserName).ToList();
-            return Ok(customers);
-
-        }
-
-        [HttpPost("SearchSerialNumber/{username}/{SerialNumber}")]
-		public async Task<ActionResult<SerialNumberSearch>> GetSmInboundStockCii(string username, string SerialNumber)
+		[HttpPost("UpdateInbounddata")]
+		public async Task<IActionResult> UpdateInbounddata([FromBody] List<UpdateInboundData> data, CancellationToken cancellationToken)
 		{
-			var customers = _context.StockInboundCIILists.FromSqlRaw(@"exec searchbyserialnumber @p0 , @p1", SerialNumber, username).ToList();
-			return Ok(customers);
+			var updated = await _inboundStockService.UpdateInboundDataAsync(data, cancellationToken);
+
+			return updated == null
+				? Success(message: "Bulk Data Uploaded Successfully")
+				: Updated(updated, "Inbound data updated successfully.");
 		}
 
-
-		// GET: api/SmInboundStockCiis/5
-		[HttpGet("{MaterialNumber}/{SerialNumber}/{name}")]
-		public async Task<ActionResult<SmInboundStockCii>> GetSmInboundStockCiii(string MaterialNumber, string? SerialNumber, string name)
-		{
-			SerialNumber =
-		string.IsNullOrWhiteSpace(SerialNumber) ||
-		SerialNumber.Equals("null", StringComparison.OrdinalIgnoreCase)
-		? null
-		: SerialNumber;
-			var customers = _context.StockInboundCIILists.FromSqlRaw(@"EXEC StockCIIListBySerialNumber @p0, @p1, @p2",MaterialNumber,SerialNumber,name).ToList();
-
-			return Ok(customers);
-		}
-
-
+		// ------------------------------------------------------------------ Material master
 
 		[HttpPost("Material")]
-		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data)
+		public async Task<IActionResult> AddMaterialNumber([FromBody] AddMaterial data, CancellationToken cancellationToken)
 		{
-			try
-			{
-				await _context.Database.ExecuteSqlRawAsync(@"exec AddMaterialNumberNew @p0, @p1, @p2", data.userName, data.MaterialNumber, data.MaterialDescription);
-				return Ok(); 
-			}
-			catch (SqlException ex) when (ex.Number == 50001)  // Unique Key Violation
-            {
-				return StatusCode(400, "Duplicate entry: The material number already exists.");
-			}
-			catch (Exception ex)
-			{
-				return StatusCode(500, $"An error occurred: {ex.Message}");
-			}
+			await _inboundStockService.AddMaterialAsync(data, cancellationToken);
+
+			return Success(message: "Material number added successfully.");
 		}
-        [HttpPost("update")]
-        public async Task<IActionResult> UpdateMaterialNumber([FromBody] UpdateAddMaterial data)
-        {
-            try
-            {
-                await _context.Database.ExecuteSqlRawAsync(@"exec updatematerialNumber @p0, @p1, @p2, @p3", data.userName, data.ExistMaterialNumber, data.MaterialNumber, data.MaterialDescription);
-                return Ok();
-            }
-            catch (Exception ex)
-            {
-                // Log the exception or handle it as needed
-                return StatusCode(500, "An error occurred while processing your request.");
-            }
-        }
+
+		[HttpPost("update")]
+		public async Task<IActionResult> UpdateMaterialNumber([FromBody] UpdateAddMaterial data, CancellationToken cancellationToken)
+		{
+			await _inboundStockService.UpdateMaterialAsync(data, cancellationToken);
+
+			return Updated(message: "Material number updated successfully.");
+		}
 
 		[HttpPost("{MaterialNumber}/{IsActive}/{userName}")]
-		public async Task<ActionResult<StockCiiList>> deleteMaterialNumber(string MaterialNumber, bool IsActive, string userName)
+		public async Task<IActionResult> deleteMaterialNumber(string MaterialNumber, bool IsActive, string userName, CancellationToken cancellationToken)
 		{
-			try
-			{
+			await _inboundStockService.DeleteMaterialAsync(MaterialNumber, IsActive, userName, cancellationToken);
 
-				await _context.Database.ExecuteSqlRawAsync(@"exec deletematerialnumber @p0, @p1, @p2", userName, MaterialNumber, IsActive);
-				return Ok();
-			}
-			catch (Exception ex)
-			{
-				// Log the exception or handle it as needed
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Deleted(message: "Material number status updated successfully.");
 		}
+
+		// ------------------------------------------------------------------ Serial numbers
+
 		[HttpPost("serial/{MaterialNumber}/{SerialNumber}")]
-        public async Task<ActionResult<SmInboundStockCii>> deleteSerialNumber(string MaterialNumber, string SerialNumber)
-        {
-            try
-            {
-                var customers = _context.SmInboundStockCiiDeletes.FromSqlRaw(@"exec sp_deleteserialNumber @p0, @p1", MaterialNumber, SerialNumber).ToList();
-                return Ok(customers);
-
-            }
-            catch (Exception ex)
-            {
-                // Log the exception or handle it as needed
-                return StatusCode(500, "An error occurred while processing your request.");
-            }
-        }
-        [HttpPost("serialNumberHardDelete/{MaterialNumber}/{SerialNumber}")]
-        public async Task<ActionResult<SmInboundStockCii>> serialNumberHardDelete(string MaterialNumber, string SerialNumber)
-        {
-            try
-            {
-                var customers = _context.SmInboundStockCiiDeletes.FromSqlRaw(@"exec sp_deleteHardserialNumber @p0, @p1", MaterialNumber, SerialNumber).ToList();
-                return Ok(customers);
-
-            }
-            catch (Exception ex)
-            {
-                // Log the exception or handle it as needed
-                return StatusCode(500, "An error occurred while processing your request.");
-            }
-        }
-
-        [HttpPost("UpdateSerialStatus/{MaterialNumber}/{SerialNumber}/{status}/{UserName}")]
-		public async Task<IActionResult> UpdateSerialStatus(string MaterialNumber, string SerialNumber, string status, string UserName)
+		public async Task<IActionResult> deleteSerialNumber(string MaterialNumber, string SerialNumber, CancellationToken cancellationToken)
 		{
-			try
-			{
-				// Validate input parameters
-				if (string.IsNullOrWhiteSpace(MaterialNumber) || string.IsNullOrWhiteSpace(SerialNumber) || string.IsNullOrWhiteSpace(status))
-				{
-					return BadRequest("MaterialNumber, SerialNumber, and status cannot be empty.");
-				}
+			var result = await _inboundStockService.DeleteSerialAsync(MaterialNumber, SerialNumber, cancellationToken);
 
-
-				var statuss = await _context
-		.Database
-		.SqlQueryRaw<string>("SELECT status FROM [dbo].[sm_Inbound_StockCII] WHERE SerialNumber = @p0 AND MaterialNumber = @p1", SerialNumber,
-			MaterialNumber )
-		.ToListAsync();
-
-				// Validate if the status exists and is "Delivered"
-				
-
-				if (!string.Equals(statuss[0], "Outward", StringComparison.OrdinalIgnoreCase))
-				{
-					await _context.Database.ExecuteSqlRawAsync(
-					"EXEC sp_updateserialstatus @p0, @p1, @p2,@p3", UserName, MaterialNumber, SerialNumber, status);
-
-
-
-					return Ok("Serial status updated successfully.");
-					
-				}
-				else
-				{
-					return BadRequest("The serial number status should not be 'Outward' before Update.");
-				}
-
-
-				// Execute stored procedure to update serial status
-				
-			}
-			catch (Exception ex)
-			{
-				// Log the error (use a logging framework like Serilog in production)
-				Console.WriteLine($"Error updating serial status: {ex.Message}");
-
-				return StatusCode(500, "An error occurred while processing your request.");
-			}
+			return Deleted(result, "Serial number deleted successfully.");
 		}
 
+		[HttpPost("serialNumberHardDelete/{MaterialNumber}/{SerialNumber}")]
+		public async Task<IActionResult> serialNumberHardDelete(string MaterialNumber, string SerialNumber, CancellationToken cancellationToken)
+		{
+			var result = await _inboundStockService.HardDeleteSerialAsync(MaterialNumber, SerialNumber, cancellationToken);
+
+			return Deleted(result, "Serial number permanently deleted successfully.");
+		}
+
+		[HttpPost("UpdateSerialStatus/{MaterialNumber}/{SerialNumber}/{status}/{UserName}")]
+		public async Task<IActionResult> UpdateSerialStatus(string MaterialNumber, string SerialNumber, string status, string UserName, CancellationToken cancellationToken)
+		{
+			await _inboundStockService.UpdateSerialStatusAsync(MaterialNumber, SerialNumber, status, UserName, cancellationToken);
+
+			return Updated(message: "Serial status updated successfully.");
+		}
+
+		// ------------------------------------------------------------------ Entity CRUD
 
 		// PUT: api/SmInboundStockCiis/5
-		// To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
 		[HttpPut("{id}")]
-        public async Task<IActionResult> PutSmInboundStockCii(string id, SmInboundStockCii smInboundStockCii)
-        {
-            if (id != smInboundStockCii.DeliveryNumber)
-            {
-                return BadRequest();
-            }
+		public async Task<IActionResult> PutSmInboundStockCii(string id, SmInboundStockCii smInboundStockCii, CancellationToken cancellationToken)
+		{
+			await _inboundStockService.UpdateAsync(id, smInboundStockCii, cancellationToken);
 
-            _context.Entry(smInboundStockCii).State = EntityState.Modified;
+			return Updated(message: "Inbound CII stock updated successfully.");
+		}
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!SmInboundStockCiiExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+		// POST: api/SmInboundStockCiis
+		[HttpPost]
+		public async Task<IActionResult> PostSmInboundStockCii(SmInboundStockCii smInboundStockCii, CancellationToken cancellationToken)
+		{
+			var created = await _inboundStockService.CreateAsync(smInboundStockCii, cancellationToken);
 
-            return Ok();
-        }
+			return Created(created, "Inbound CII stock created successfully.");
+		}
 
-        // POST: api/SmInboundStockCiis
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<SmInboundStockCii>> PostSmInboundStockCii(SmInboundStockCii smInboundStockCii)
-        {
-            _context.SmInboundStockCiis.Add(smInboundStockCii);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (SmInboundStockCiiExists(smInboundStockCii.DeliveryNumber))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+		// DELETE: api/SmInboundStockCiis/5
+		[HttpDelete("{id}")]
+		public async Task<IActionResult> DeleteSmInboundStockCii(string id, CancellationToken cancellationToken)
+		{
+			await _inboundStockService.DeleteAsync(id, cancellationToken);
 
-            return CreatedAtAction("GetSmInboundStockCii", new { id = smInboundStockCii.DeliveryNumber }, smInboundStockCii);
-        }
-
-        // DELETE: api/SmInboundStockCiis/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteSmInboundStockCii(string id)
-        {
-            var smInboundStockCii = await _context.SmInboundStockCiis.FindAsync(id);
-            if (smInboundStockCii == null)
-            {
-                return NotFound();
-            }
-
-            _context.SmInboundStockCiis.Remove(smInboundStockCii);
-            await _context.SaveChangesAsync();
-
-            return Ok();
-        }
-
-        private bool SmInboundStockCiiExists(string id)
-        {
-            return _context.SmInboundStockCiis.Any(e => e.DeliveryNumber == id);
-        }
-    }
+			return Deleted(message: "Inbound CII stock deleted successfully.");
+		}
+	}
 }
