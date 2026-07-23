@@ -32,7 +32,7 @@ namespace StockManagementWebApi.Services
 
 		Task BulkAddOutboundAsync(List<BulkAddOutboundDataNonStockCii> dataList, CancellationToken cancellationToken = default);
 
-		Task<IReadOnlyList<GetNonStockDeliveredData>> GetDeliveredListAsync(string materialNumber, CancellationToken cancellationToken = default);
+		Task<IReadOnlyList<GetNonStockDeliveredData>> GetDeliveredListAsync(string materialNumber, string UserName , CancellationToken cancellationToken = default);
 
 		Task DeleteDeliveredAsync(string materialNumber, string deliveryNumber, string outboundStockNonCiiKey, string userName, CancellationToken cancellationToken = default);
 
@@ -58,9 +58,9 @@ namespace StockManagementWebApi.Services
 
 		Task<DashboardSummary> GetDashboardAsync(string userName, CancellationToken cancellationToken = default);
 
-		Task<IReadOnlyList<AnalyticsDashboard>> GetCiiAnalyticsAsync(string materialNumber, CancellationToken cancellationToken = default);
+		Task<IReadOnlyList<AnalyticsDashboard>> GetCiiAnalyticsAsync(string materialNumber, string UserName, CancellationToken cancellationToken = default);
 
-		Task<IReadOnlyList<AnalyticsDashboard>> GetNonCiiAnalyticsAsync(string materialNumber, CancellationToken cancellationToken = default);
+		Task<IReadOnlyList<AnalyticsDashboard>> GetNonCiiAnalyticsAsync(string materialNumber, string UserName , CancellationToken cancellationToken = default);
 
 		Task<DashboardChartSummary> GetDashboardChartsAsync(string userName, CancellationToken cancellationToken = default);
 
@@ -502,18 +502,17 @@ WHERE smm.MaterialNumber = {materialNumber}
 				cancellationToken: cancellationToken);
 		}
 
-		public async Task<IReadOnlyList<GetNonStockDeliveredData>> GetDeliveredListAsync(string materialNumber, CancellationToken cancellationToken = default)
-		{
-			Require(materialNumber, nameof(materialNumber));
+        public async Task<IReadOnlyList<GetNonStockDeliveredData>> GetDeliveredListAsync(string materialNumber, string UserName, CancellationToken cancellationToken = default)
+        {
+            Require(materialNumber, nameof(materialNumber));
+            Require(UserName, nameof(UserName));
 
-			return await _context.GetNonStockDeliveredDatas
-				.FromSqlRaw(
-					"SELECT * FROM sm_OutboundStock_NonCII WHERE materialnumber = @MaterialNumber AND IsActive <> 0",
-					new SqlParameter("@MaterialNumber", materialNumber))
-				.ToListAsync(cancellationToken);
-		}
+            return await _context.GetNonStockDeliveredDatas
+                .FromSqlRaw("exec dbo.sp_getDeliveredStock_NonCII @p0, @p1", materialNumber, UserName)
+                .ToListAsync(cancellationToken);
+        }
 
-		public async Task DeleteDeliveredAsync(string materialNumber, string deliveryNumber, string outboundStockNonCiiKey, string userName, CancellationToken cancellationToken = default)
+        public async Task DeleteDeliveredAsync(string materialNumber, string deliveryNumber, string outboundStockNonCiiKey, string userName, CancellationToken cancellationToken = default)
 		{
 			var errors = new List<string>();
 			if (string.IsNullOrWhiteSpace(materialNumber))
@@ -860,21 +859,23 @@ WHERE smm.MaterialNumber = {materialNumber}
 			};
 		}
 
-		public async Task<IReadOnlyList<AnalyticsDashboard>> GetCiiAnalyticsAsync(string materialNumber, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyList<AnalyticsDashboard>> GetCiiAnalyticsAsync(string materialNumber, string UserName, CancellationToken cancellationToken = default)
 		{
-			Require(materialNumber, nameof(materialNumber));
+            Require(materialNumber, nameof(materialNumber));
+            Require(UserName, nameof(UserName));
 
-			return await _context.AnalyticsDashboards
-				.FromSqlRaw(@"exec AnalyticsCount_CII @p0", materialNumber)
+            return await _context.AnalyticsDashboards
+				.FromSqlRaw(@"exec AnalyticsCount_CII @p0,@p1", materialNumber, UserName)
 				.ToListAsync(cancellationToken);
 		}
 
-		public async Task<IReadOnlyList<AnalyticsDashboard>> GetNonCiiAnalyticsAsync(string materialNumber, CancellationToken cancellationToken = default)
+		public async Task<IReadOnlyList<AnalyticsDashboard>> GetNonCiiAnalyticsAsync(string materialNumber, string UserName , CancellationToken cancellationToken = default)
 		{
 			Require(materialNumber, nameof(materialNumber));
+            Require(UserName, nameof(UserName));
 
-			return await _context.AnalyticsDashboards
-				.FromSqlRaw(@"exec AnalyticsCount_NonCII @p0", materialNumber)
+            return await _context.AnalyticsDashboards
+				.FromSqlRaw(@"exec AnalyticsCount_NonCII @p0,@p1", materialNumber, UserName)
 				.ToListAsync(cancellationToken);
 		}
 

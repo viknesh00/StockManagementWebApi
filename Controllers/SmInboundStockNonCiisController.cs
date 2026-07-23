@@ -262,10 +262,10 @@ namespace StockManagementWebApi.Controllers
 			return Success(message: "Bulk upload completed successfully.");
 		}
 
-		[HttpGet("DeliveredDataList/{MaterialNumber}")]
-		public async Task<IActionResult> GetDeliveredDataList(string MaterialNumber, CancellationToken cancellationToken)
+		[HttpGet("DeliveredDataList/{MaterialNumber}/{UserName}")]
+		public async Task<IActionResult> GetDeliveredDataList(string MaterialNumber, string UserName , CancellationToken cancellationToken)
 		{
-			var delivered = await _nonCiiStockService.GetDeliveredListAsync(MaterialNumber, cancellationToken);
+			var delivered = await _nonCiiStockService.GetDeliveredListAsync(MaterialNumber, UserName , cancellationToken);
 
 			return Success(delivered, "Delivered data retrieved successfully.");
 		}
@@ -372,18 +372,18 @@ namespace StockManagementWebApi.Controllers
 			return Success(dashboard, "Dashboard retrieved successfully.");
 		}
 
-		[HttpPost("AnalyticsCII/{MaterialNumber}")]
-		public async Task<IActionResult> AnalyticsCII(string MaterialNumber, CancellationToken cancellationToken)
+		[HttpPost("AnalyticsCII/{MaterialNumber}/{UserName}")]
+		public async Task<IActionResult> AnalyticsCII(string MaterialNumber, string UserName, CancellationToken cancellationToken)
 		{
-			var analytics = await _nonCiiStockService.GetCiiAnalyticsAsync(MaterialNumber, cancellationToken);
+			var analytics = await _nonCiiStockService.GetCiiAnalyticsAsync(MaterialNumber, UserName, cancellationToken);
 
 			return Success(analytics, "CII analytics retrieved successfully.");
 		}
 
-		[HttpPost("AnalyticsNonCII/{MaterialNumber}")]
-		public async Task<IActionResult> AnalyticsNonCII(string MaterialNumber, CancellationToken cancellationToken)
+		[HttpPost("AnalyticsNonCII/{MaterialNumber}/{UserName}")]
+		public async Task<IActionResult> AnalyticsNonCII(string MaterialNumber, string UserName , CancellationToken cancellationToken)
 		{
-			var analytics = await _nonCiiStockService.GetNonCiiAnalyticsAsync(MaterialNumber, cancellationToken);
+			var analytics = await _nonCiiStockService.GetNonCiiAnalyticsAsync(MaterialNumber, UserName , cancellationToken);
 
 			return Success(analytics, "Non-CII analytics retrieved successfully.");
 		}
